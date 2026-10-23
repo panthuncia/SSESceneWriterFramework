@@ -1,0 +1,68 @@
+# SceneWriterFramework (SWF)
+
+SWF hooks the engine's scene writers once and gives every SKSE plugin the same view of scene changes: synchronous events, filter points, and a write/notify API.
+
+It ships in two ways:
+
+- **Standalone:** `SceneWriterFramework.dll` in `Data/SKSE/Plugins`.
+- **Embedded:** a static library inside another mod. Community Shaders is the first.
+
+Every copy in the process is a candidate. At SKSE `kPostLoad` they elect one provider: the newest copy that supports the running game version. That provider installs the hooks and serves the API to everyone. The algorithm is in [`include/swf/swf_client.h`](include/swf/swf_client.h).
+
+Status: pre-release (0.x). The ABI is not frozen until 1.0.0. No hook families yet, so the provider reports `caps none`.
+
+## Embedding
+
+```cmake
+include(extern/SceneWriterFramework/cmake/SWFEmbed.cmake)
+target_link_libraries(MyPlugin PRIVATE swf::embedded)
+```
+
+```cpp
+#include "swf/swf_embed.h"
+
+// SKSE messaging handler
+case SKSE::MessagingInterface::kPostLoad:
+	swfApi = SWF_Embed_OnPostLoad();  // null: disabled, unsupported runtime, or no provider
+	break;
+```
+
+## Client-only use (no embedded copy)
+
+```cpp
+#include "swf/swf_client.h"
+
+const SWF_Api* api = swf::client::Connect();  // at kPostPostLoad or later
+```
+
+## User settings
+
+Settings live in `Data/SKSE/Plugins/SceneWriterFramework.ini`:
+
+```ini
+[Election]
+Disable=0
+PinHost=CommunityShaders.dll   ; try this host's copy first
+PinVersion=0.1.0               ; or a specific version (major.minor.patch[.build])
+```
+
+The log is `Documents/My Games/Skyrim Special Edition/SKSE/SceneWriterFramework.log`. Every line names the host DLL and SWF version that wrote it.
+
+## Building and testing
+
+```
+cmake --preset vs
+cmake --build --preset vs-release
+ctest --preset vs-release
+```
+
+The tests cover the frozen ABI layout and the election, with each scenario in its own process. The scenarios use four host DLLs that embed different versions, plus a client-only DLL. They check:
+
+- that the result doesn't depend on the order hosts run the election;
+- version tie-breaking;
+- fallback when a candidate fails to activate, and the case where all fail;
+- the INI pin and disable settings;
+- an unsupported runtime;
+- a candidate that loads late;
+- client-only connection;
+- dispatch order.
