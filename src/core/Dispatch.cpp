@@ -10,7 +10,8 @@ namespace swf::inline SWF_NAMESPACE::dispatch
 {
 	namespace
 	{
-		std::atomic<uint64_t> sequence{ 0 };
+		// Per writer thread: a shared counter would put every hooked call on one contended cache line.
+		thread_local uint64_t sequence = 0;
 
 		constexpr int kIdShift = 48;
 		constexpr uint64_t kSerialMask = (1ull << kIdShift) - 1;
@@ -150,7 +151,8 @@ namespace swf::inline SWF_NAMESPACE::dispatch
 	{
 		header.phase = phase;
 		header.threadId = GetCurrentThreadId();
-		header.sequence = sequence.fetch_add(1, std::memory_order_relaxed) + 1;
+		if (!header.sequence)
+			header.sequence = ++sequence;
 	}
 
 	void Fire(SWF_EventHeader& header)

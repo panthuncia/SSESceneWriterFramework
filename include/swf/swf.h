@@ -54,6 +54,14 @@ typedef uint64_t SWF_Caps;
 #define SWF_CAP_HIDDEN (1ull << 0)       /* SWF_EVENT_HIDDEN, SWF_FILTER_SHOW */
 #define SWF_CAP_SWITCH_INDEX (1ull << 1) /* SWF_EVENT_SWITCH_INDEX */
 #define SWF_CAP_FADE_RESET (1ull << 2)   /* SWF_EVENT_FADE_RESET */
+#define SWF_CAP_STRUCTURE (1ull << 3)          /* SWF_EVENT_CHILD_ATTACHED, SWF_EVENT_CHILD_DETACHING */
+#define SWF_CAP_SWITCH_STRUCTURAL (1ull << 4)  /* SWF_EVENT_SWITCH_STRUCTURAL */
+#define SWF_CAP_MOVES (1ull << 5)              /* SWF_EVENT_MOVED */
+#define SWF_CAP_FADE_CALLS (1ull << 6)         /* SWF_HOOK_FADE_* */
+#define SWF_CAP_NODE_CALLS (1ull << 7)         /* SWF_HOOK_CELL_*, collision, controllers, dismember */
+#define SWF_CAP_PROPERTY_CALLS (1ull << 8)     /* SWF_HOOK_PROPERTY_*, SWF_HOOK_LIGHTING_*, emittance */
+#define SWF_CAP_GEOMETRY_CALLS (1ull << 9)     /* alpha, weapon blood, land */
+#define SWF_CAP_MATERIAL_CALLS (1ull << 10)    /* controllers' and materials' in-place writes */
 
 /* Subscription phases. Function-hook events fire PRE and POST around the engine call;
  * store events fire POST only. A subscription may ask for both. */
@@ -65,6 +73,10 @@ typedef uint64_t SWF_Caps;
 #define SWF_EVENT_HIDDEN 2       /* SWF_HiddenEvent: an engine store changed NiAVObject::flags bit 0 */
 #define SWF_EVENT_SWITCH_INDEX 3 /* SWF_SwitchIndexEvent: an engine store changed NiSwitchNode::index */
 #define SWF_EVENT_FADE_RESET 4   /* SWF_FadeResetEvent: an engine store reset BSFadeNode::currentFade */
+#define SWF_EVENT_CHILD_ATTACHED 5    /* SWF_ChildEvent, after an NiNode child edit attached `child` */
+#define SWF_EVENT_CHILD_DETACHING 6   /* SWF_ChildEvent, before an NiNode child edit detaches `child` */
+#define SWF_EVENT_SWITCH_STRUCTURAL 7 /* SWF_NodeEvent, after one of NiSwitchNode's own child edits */
+#define SWF_EVENT_MOVED 8             /* SWF_MovedEvent, after an engine writer moved a reference or node */
 
 /* Filter ids. A filter runs before the write and may veto it. */
 #define SWF_FILTER_SHOW 1 /* SWF_ShowFilterEvent: an engine LOD store about to clear kHidden */
@@ -86,7 +98,7 @@ typedef struct SWF_EventHeader
 	uint32_t id;
 	uint32_t phase;    /* SWF_PHASE_PRE or SWF_PHASE_POST */
 	uint32_t threadId; /* writer thread */
-	uint64_t sequence; /* process-wide, increasing */
+	uint64_t sequence; /* increasing per writer thread; PRE and POST of one call share it */
 } SWF_EventHeader;
 
 typedef struct SWF_WrittenEvent
@@ -136,6 +148,96 @@ typedef struct SWF_ShowFilterEvent
 	uint32_t site;
 	uint32_t siteOffset;
 } SWF_ShowFilterEvent;
+
+typedef struct SWF_ChildEvent
+{
+	SWF_EventHeader header;
+	void* parent; /* NiNode* */
+	void* child;  /* NiAVObject*; may be null (an empty slot set or detached) */
+	uint32_t unchanged; /* CHILD_ATTACHED from SetAt: the slot already held `child` */
+	uint32_t reserved;
+} SWF_ChildEvent;
+
+typedef struct SWF_NodeEvent
+{
+	SWF_EventHeader header;
+	void* node;
+} SWF_NodeEvent;
+
+/* Writers of SWF_EVENT_MOVED. */
+#define SWF_MOVE_ANIMATION_GRAPH_PLACE 0  /* FUN_14066afa0: the animation graph placed a reference */
+#define SWF_MOVE_REFERENCE_3D_POSITION 1  /* TESObjectREFR::Update3DPosition */
+#define SWF_MOVE_GRAPH_ANIMATION 2        /* FUN_1402f75a0: a reference's graph animation */
+#define SWF_MOVE_SELECTIVE_UPDATE 3       /* the cells' update passes: UpdateSelectedDownwardPass */
+
+typedef struct SWF_MovedEvent
+{
+	SWF_EventHeader header;
+	const void* key; /* TESObjectREFR*, or the NiAVObject* moved when it has no reference */
+	uint32_t writer; /* SWF_MOVE_* */
+	uint32_t reserved;
+} SWF_MovedEvent;
+
+/* Engine call hooks. SWF_EVENT_CALL(hook) fires PRE before and POST after the engine function,
+ * on the calling thread. `args` holds its arguments in order: pointers and unsigned integers
+ * zero-extended, signed integers sign-extended, bools as 0 or 1, floats as their IEEE bits in
+ * the low 32 bits. At POST `result` holds the return value the same way (0 for void). The
+ * signatures below are the engine's (AE offsets from the image base; "slot" is a vtable slot
+ * whose implementation SWF hooks). */
+#define SWF_EVENT_CALL_BASE 64
+#define SWF_EVENT_CALL(hook) (SWF_EVENT_CALL_BASE + (hook))
+#define SWF_CALL_MAX_ARGS 8
+
+typedef struct SWF_CallEvent
+{
+	SWF_EventHeader header;
+	uint32_t hook;
+	uint32_t argCount;
+	uint64_t args[SWF_CALL_MAX_ARGS];
+	uint64_t result;
+} SWF_CallEvent;
+
+/* SWF_CAP_FADE_CALLS */
+#define SWF_HOOK_FADE_ON_VISIBLE 1    /* BSFadeNode slot 0x34 (fade, NiCullingProcess*, int32 alphaGroup) */
+#define SWF_HOOK_FADE_UPDATE 2        /* 0x147a160 (fade, float fadeAmount, camera) -> uint64 */
+#define SWF_HOOK_FADE_LOD_LEVEL 3     /* 0x147a430 (fade, float level): the LOD level (+0x152 & 0xF) */
+#define SWF_HOOK_FADE_SET_RANGE 4     /* 0x147a9b0 (fade, float near, float far) */
+#define SWF_HOOK_FADE_SET_LOD_TYPE 5  /* 0x147aa00 (fade, uint8 type) */
+/* SWF_CAP_NODE_CALLS */
+#define SWF_HOOK_CELL_PLACE_REFERENCE 6       /* 0x2d1280 (TESObjectCELL*, TESObjectREFR*) */
+#define SWF_HOOK_CELL_PLACE_REFERENCE_AT 7    /* 0x2d5090 (TESObjectCELL*, TESObjectREFR*, bool snap) -> void* */
+#define SWF_HOOK_RIGID_BODY_MOTION_TYPE 8     /* 0xb44490 (hkpRigidBody*, uint32 type, uint32, uint32) */
+#define SWF_HOOK_RELEASE_COLLISION_OBJECT 9   /* 0xe880e0 (visit*): the node is at visit +0x10 */
+#define SWF_HOOK_SET_COLLISION_OBJECT 10      /* 0xe8bd40 (NiAVObject*, NiCollisionObject*) */
+#define SWF_HOOK_PREPEND_CONTROLLER 11        /* 0xd268d0 (NiObjectNET*, NiTimeController*) */
+#define SWF_HOOK_REMOVE_CONTROLLER 12         /* 0xd269a0 (NiObjectNET*, NiTimeController*) */
+#define SWF_HOOK_HAVOK_NODE_TRANSFORM 13      /* 0xea55a0 (NiCollisionObject*, const transform*) */
+#define SWF_HOOK_DISMEMBER_PARTITION 14       /* 0x21a530 (BSDismemberSkinInstance*, uint16 slot, bool visible) */
+#define SWF_HOOK_BIPED_DISMEMBER_PARTITIONS 15 /* 0x218200 (biped, object, BSDismemberSkinInstance*, int32 slot, bool) */
+/* SWF_CAP_PROPERTY_CALLS */
+#define SWF_HOOK_PROPERTY_SET_FLAGS 16        /* 0x147bee0 BSShaderProperty::SetFlags (property, uint8 flag, bool set) */
+#define SWF_HOOK_PROPERTY_SET_MATERIAL 17     /* 0x147bff0 BSShaderProperty::SetMaterial (property, material, bool unique) */
+#define SWF_HOOK_LIGHTING_SET_MATERIAL_ALPHA 18 /* BSLightingShaderProperty slot 0x31 (property, float alpha) */
+#define SWF_HOOK_LIGHTING_GET_RENDER_PASSES 19  /* BSLightingShaderProperty slot 0x2A (property, geometry, uint32 flags, accumulator) -> passes */
+#define SWF_HOOK_PROPERTIES_SET_FLAG 20       /* 0x147c1e0 (object, uint32 flag, bool set, bool lightingOnly) -> uint64 */
+#define SWF_HOOK_PROPERTIES_SET_FADE_NODE 21  /* 0x147c690 (BSFadeNode**, object) */
+#define SWF_HOOK_PROPERTIES_PROJECTED_UV 22   /* 0x14abd10 (object, visitor) -> uint64 */
+#define SWF_HOOK_SET_EXTERNAL_EMITTANCE 23    /* 0x1480fc0 (object, NiColor**) -> uint64 */
+#define SWF_HOOK_SKY_SET_COLOR 24             /* 0x40d970 Sky::SetColor (sky, NiColor*, blend, float flash) */
+/* SWF_CAP_GEOMETRY_CALLS */
+#define SWF_HOOK_GEOMETRY_ATTACH_ALPHA 25     /* 0x267cf0 BSGeometry::AttachProperty (geometry, NiAlphaProperty*) */
+#define SWF_HOOK_ALPHAS_SET_THRESHOLD 26      /* 0x14ab770 (object, visitor) -> uint64 */
+#define SWF_HOOK_WEAPON_BLOOD_GEOMETRY 27     /* 0x14ab580 (object, visitor) -> uint64 */
+#define SWF_HOOK_LAND_SETUP_PROPERTIES 28     /* 0x2ad800 (TESObjectLAND*) -> uint64 */
+#define SWF_HOOK_LAND_BLEND_PARAMS 29         /* 0x2ad0e0 (TESObjectLAND*) */
+/* SWF_CAP_MATERIAL_CALLS */
+#define SWF_HOOK_FLOAT_CONTROLLER_UPDATE 30   /* BSLightingShaderPropertyFloatController slot 0x27 (controller, data) */
+#define SWF_HOOK_COLOR_CONTROLLER_UPDATE 31   /* BSLightingShaderPropertyColorController slot 0x27 (controller, data) */
+#define SWF_HOOK_MATERIAL_COPY_MEMBERS 32     /* the 14 Lighting material classes, slot 0x02 (material, source) */
+#define SWF_HOOK_MATERIAL_LOAD_TEXTURE_SET 33 /* slot 0x08 (material, uint64, BSTextureSet*) */
+#define SWF_HOOK_MATERIAL_CLEAR_TEXTURES 34   /* slot 0x09 (material) */
+#define SWF_HOOK_MATERIAL_RECEIVE_VALUES 35   /* slot 0x0A (material, bool, bool, bool, bool, bool) */
+#define SWF_HOOK_COUNT 36
 
 /* Event callback. `scratch` points to SWF_SCRATCH_WORDS words private to this subscription
  * and this engine call, zeroed before the first dispatch. For a PRE|POST subscription they

@@ -60,7 +60,8 @@ namespace swf::inline SWF_NAMESPACE::dispatch
 	Table& Events();
 	Table& Filters();
 
-	/// Stamps phase, writer thread and sequence into `header`.
+	/// Stamps phase and writer thread into `header`, and a sequence number unless it has one (the
+	/// POST of a call keeps its PRE's).
 	void Stamp(SWF_EventHeader& header, uint32_t phase);
 
 	/// Fires a POST-only event (store events, notifications).

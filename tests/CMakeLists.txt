@@ -45,3 +45,10 @@ add_executable(swf_dispatch_tests dispatch/DispatchTests.cpp)
 target_link_libraries(swf_dispatch_tests PRIVATE swf_test_core_a)
 swf_internal_compile(swf_dispatch_tests VERSION 0.1.0.0 DEFINITIONS SWF_TESTING)
 add_test(NAME dispatch COMMAND swf_dispatch_tests)
+
+# The detour families end to end: fake RTTI vtables, real detours, a synthetic call-site region.
+add_executable(swf_detour_tests detours/DetourTests.cpp)
+target_link_libraries(swf_detour_tests PRIVATE swf_test_core_a)
+swf_internal_compile(swf_detour_tests VERSION 0.1.0.0 DEFINITIONS SWF_TESTING)
+target_include_directories(swf_detour_tests PRIVATE ${DETOURS_INCLUDE_DIRS})
+add_test(NAME detour_families COMMAND swf_detour_tests)
