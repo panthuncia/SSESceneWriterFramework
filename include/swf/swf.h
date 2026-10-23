@@ -243,7 +243,7 @@ typedef struct SWF_CallEvent
  * and this engine call, zeroed before the first dispatch. For a PRE|POST subscription they
  * survive from the PRE to the POST dispatch of the same call; otherwise they are fresh on
  * every dispatch. The pointer is valid until the callback returns. */
-#define SWF_SCRATCH_WORDS 4
+#define SWF_SCRATCH_WORDS 8
 typedef void (*SWF_EventFn)(const SWF_EventHeader* event, uintptr_t* scratch, void* user);
 
 /* Filter callback: return nonzero to veto the write. Filters run in priority order and
