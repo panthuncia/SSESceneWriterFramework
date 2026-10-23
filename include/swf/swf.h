@@ -22,7 +22,7 @@ extern "C" {
 #endif
 
 #define SWF_ABI_MAJOR 1
-#define SWF_ABI_MINOR 0
+#define SWF_ABI_MINOR 1 /* 1: CheckIntegrity */
 
 /* Frozen: name of the export every candidate provides. */
 #define SWF_CANDIDATE_EXPORT "SWF_Candidate_v1"
@@ -290,6 +290,25 @@ typedef int32_t (*SWF_FilterFn)(const SWF_EventHeader* event, void* user);
 
 typedef uint64_t SWF_Subscription;
 
+/* Kinds of patch the integrity check re-reads. */
+#define SWF_SITE_DETOUR 1 /* the jump a detour wrote at a function's start */
+#define SWF_SITE_CALL 2   /* a rewritten call site (a store, or a hooked call) */
+#define SWF_SITE_SLOT 3   /* a swapped vtable slot */
+
+/* One patch of SWF's that something rewrote after SWF installed it. */
+typedef struct SWF_IntegrityEntry
+{
+	uint32_t size;
+	uint32_t kind;     /* SWF_SITE_* */
+	uintptr_t address; /* the patched bytes */
+	uint32_t offset;   /* from the game executable's image base (0 outside it) */
+	uint32_t reserved;
+	const char* family; /* the hook family's name */
+	const char* module; /* file name of the module the new bytes lead into, or null; valid during the callback */
+	uintptr_t target;   /* the address the new bytes lead to (through relays outside any module) */
+} SWF_IntegrityEntry;
+typedef void (*SWF_IntegrityFn)(const SWF_IntegrityEntry* entry, void* user);
+
 typedef struct SWF_ProviderInfo
 {
 	uint32_t size; /* set by the caller to sizeof(SWF_ProviderInfo) */
@@ -326,6 +345,12 @@ typedef struct SWF_Api
 	/* Maps an instruction address inside one of SWF's store stubs back to the engine store it
 	 * replaced (for hardware-watch diagnostics). Any output pointer may be null. */
 	SWF_Result (*ResolveSite)(uintptr_t address, uint32_t* eventId, uint32_t* site, uint32_t* siteOffset);
+
+	/* abiMinor >= 1. Re-reads every patch SWF installed and reports each one rewritten since (by a plugin
+	 * hooking the same code after SWF), with the module its new bytes lead into; also logs them. Repairs
+	 * nothing: a later hook that calls on still reaches SWF's. `fn` may be null. Returns the count. Hosts
+	 * call it once the game's data has loaded (SKSE kDataLoaded), when every plugin has installed. */
+	uint32_t (*CheckIntegrity)(SWF_IntegrityFn fn, void* user);
 } SWF_Api;
 
 typedef struct SWF_CandidateInfo

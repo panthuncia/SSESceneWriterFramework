@@ -21,7 +21,13 @@ Status: pre-release (0.x). The ABI is not frozen until 1.0.0. Only the AE 1.6.11
 | structure | NiNode's 7 child-edit implementations, the classes overriding them, and the remove-all | `SWF_EVENT_CHILD_ATTACHED`, `SWF_EVENT_CHILD_DETACHING` |
 | switch-structural | NiSwitchNode's own 7 child edits | `SWF_EVENT_SWITCH_STRUCTURAL` |
 | moves | 3 reference movers and the cells' 2 update passes | `SWF_EVENT_MOVED` |
-| fade / node / property / geometry / material calls | 35 engine functions and vtable slots (see `SWF_HOOK_*` in `swf.h`) | `SWF_EVENT_CALL(hook)`, before and after, with the arguments |
+| fade / node / property / geometry / material calls | 36 engine functions and vtable slots (see `SWF_HOOK_*` in `swf.h`) | `SWF_EVENT_CALL(hook)`, before and after, with the arguments |
+| actor calls | `Actor::SetAlpha` on 3 vtables, and 3 actor move writers | `SWF_EVENT_CALL(hook)` |
+| decal calls | the 5 edits of a `BGSDecalNode`'s decal array | `SWF_EVENT_CALL(SWF_HOOK_DECAL_ARRAY_EDIT)` |
+| LOD segment calls | object LOD's segment show, hide and show-all, at all 9 of their call sites | `SWF_EVENT_CALL(hook)` |
+| tree LOD calls | the tree LOD refill at its 2 call sites, and the instance shape's AddGroup and RemoveGroup | `SWF_EVENT_CALL(hook)` |
+| tree animation calls | the tree manager's animation list: add, remove, clear | `SWF_EVENT_CALL(hook)`; `SWF_FILTER_CALL(SWF_HOOK_TREE_ANIM_REMOVE)` |
+| effect calls | the effect shader controllers and the effect material's rewrite | `SWF_EVENT_CALL(hook)` |
 
 The provider checks every site before it writes any of them: store and call-site bytes, and each vtable's RTTI name. A family whose sites another plugin has already changed is left out, and its `SWF_CAP_*` bit stays clear. Each client decides from `GetCaps()` whether it can run.
 
@@ -48,6 +54,60 @@ case SKSE::MessagingInterface::kPostLoad:
 
 const SWF_Api* api = swf::client::Connect();  // at kPostPostLoad or later
 ```
+
+## Using the API
+
+Subscribe at SKSE `kPostPostLoad` or later. Check `GetCaps()` first: a family that did not install refuses its subscriptions with
+`SWF_E_UNSUPPORTED`.
+
+```cpp
+void OnAttached(const SWF_EventHeader* event, uintptr_t* scratch, void* user)
+{
+	const auto& child = *reinterpret_cast<const SWF_ChildEvent*>(event);
+	// child.parent, child.child: on the thread that made the edit
+}
+
+SWF_Subscription subscription = 0;
+api->Subscribe(SWF_EVENT_CHILD_ATTACHED, SWF_PHASE_POST, 0, &OnAttached, nullptr, &subscription);
+```
+
+Events are synchronous: the callback runs on the writing thread, inside the engine's call, before the engine continues. Keep it
+short, take no lock the engine might hold, and hand heavy work to your own thread.
+
+**Engine calls.** `SWF_EVENT_CALL(hook)` fires PRE before the engine function and POST after it, with its arguments in
+`SWF_CallEvent::args` and, at POST, its result. To compare a value before and after a call, subscribe to both phases: the
+`SWF_SCRATCH_WORDS` scratch words passed to the callback are yours, and they carry over from that call's PRE to its POST. Calls
+nest, and each has its own scratch.
+
+**Filters.** A filter runs before a write and may veto it by returning nonzero. `SWF_FILTER_SHOW` keeps an object hidden at the
+engine's LOD show stores. `SWF_FILTER_CALL(hook)` skips a vetoable call (marked in `swf.h`), with its events, returning 0 to the
+caller.
+
+**Your own writes.** SWF sees only the engine's writers. If your plugin writes scene state directly, by storing to the object or
+through CommonLib's inline setters, call `NotifyWritten(object, SWF_FIELD_*)`. Every subscriber to `SWF_EVENT_WRITTEN` then hears
+of the write.
+
+**Integrity.** `CheckIntegrity(fn, user)` reads every patch back. It reports each one that another plugin has rewritten since SWF
+installed it, naming the module the new bytes lead into, and logs it. It repairs nothing. The standalone plugin runs it at
+`kDataLoaded`, and an embedding host may run it too.
+
+## Compatibility with other hooks
+
+SWF installs at `kPostLoad`, earlier than most plugins hook. Its stubs live in a block of their own just past the game image,
+like a CommonLib trampoline. On a target another plugin also hooks:
+
+- **Detours and other prologue hooks** (Detours, MinHook, CommonLib's `detour_thunk`, hand-rolled ones that copy whole
+  instructions) chain in either order. The later hook is the outer one.
+- **Vtable swaps** that keep the previous implementation (CommonLib's `write_vfunc`) chain in either order.
+- **Call sites** another plugin rewrote first fail SWF's check, and the family is left out. A rewrite after SWF's that keeps the
+  current call target (`write_call<5>`) chains.
+- **Unsafe cases.** These break, or hide calls from SWF:
+    - a hook installed after SWF that copies a fixed number of prologue bytes, or scans for the original ones;
+    - a replacement that never calls the original.
+
+  `CheckIntegrity` names the module behind every patch that changed after install.
+
+The interop test covers each of these combinations.
 
 ## User settings
 
@@ -83,6 +143,8 @@ The tests cover the frozen ABI layout and the election, with each scenario in it
 
 A dispatch test subscribes hundreds of subscribers to one event and runs nested PRE/POST calls whose scratch spans several arena blocks.
 
-A detour test runs every detour family against fake vtables carrying real RTTI layouts, real detoured functions, and a synthetic call-site region.
+A detour test runs every detour family against fake vtables carrying real RTTI layouts, real detoured functions, and a synthetic call-site region. It also covers the hooks at call sites and the vetoable call filter.
+
+An interop test hooks SWF's targets the way other plugins do, both before and after SWF, and checks that every hook runs once, in order. It uses Detours, a hand-rolled prologue hook, vtable swaps and call-site rewrites. It then checks that the integrity check reports exactly the patches rewritten after SWF, and traces each one to its module.
 
 A separate store test runs the stubs themselves. It builds a synthetic image from real table entries, patches it the same way the game would be patched, and executes the patched stores. It checks the stored values, the events, the show veto and site resolution.

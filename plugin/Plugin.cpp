@@ -2,6 +2,7 @@
 // and to run the election at kPostLoad. It declares the few SKSE structs it needs itself
 // (SKSE PluginAPI.h layouts) so the plugin does not depend on CommonLib.
 #include "core/Log.h"
+#include "swf/swf_client.h"
 #include "swf/swf_embed.h"
 
 #include <cstdint>
@@ -40,6 +41,7 @@ namespace
 
 	constexpr uint32_t kInterface_Messaging = 5;
 	constexpr uint32_t kMessage_PostLoad = 0;
+	constexpr uint32_t kMessage_DataLoaded = 8;
 
 	constexpr uint32_t MakeExeVersion(uint32_t major, uint32_t minor, uint32_t build)
 	{
@@ -48,8 +50,15 @@ namespace
 
 	void OnMessage(SKSEMessagingInterface::Message* message)
 	{
-		if (message && message->type == kMessage_PostLoad)
+		if (!message)
+			return;
+		if (message->type == kMessage_PostLoad)
 			SWF_Embed_OnPostLoad();
+		// Every plugin has installed by now: SWF's patches that another rewrote since are logged, with the module (whichever
+		// copy is the provider checks; a host that embeds SWF may call it again).
+		if (message->type == kMessage_DataLoaded)
+			if (const SWF_Api* api = swf::client::Connect())
+				api->CheckIntegrity(nullptr, nullptr);
 	}
 }
 

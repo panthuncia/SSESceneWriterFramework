@@ -35,6 +35,7 @@ set(SWF_CORE_SOURCES
 	"${SWF_ROOT}/src/families/Stores.cpp"
 	"${SWF_ROOT}/src/families/Structure.cpp"
 	"${SWF_ROOT}/src/hooking/Hooks.cpp"
+	"${SWF_ROOT}/src/hooking/Integrity.cpp"
 	"${SWF_ROOT}/src/hooking/Memory.cpp"
 	"${SWF_ROOT}/src/tables/Ae_1_6_1170.cpp"
 	"${SWF_ROOT}/src/tables/Ae_1_6_1170_Hooks.cpp")

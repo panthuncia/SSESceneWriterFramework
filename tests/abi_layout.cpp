@@ -29,7 +29,16 @@ FROZEN(SWF_Api, RemoveFilter, 48);
 FROZEN(SWF_Api, NotifyWritten, 56);
 FROZEN(SWF_Api, SiteCount, 64);
 FROZEN(SWF_Api, ResolveSite, 72);
-static_assert(sizeof(SWF_Api) >= 80);
+FROZEN(SWF_Api, CheckIntegrity, 80);
+static_assert(sizeof(SWF_Api) >= 88);
+
+FROZEN(SWF_IntegrityEntry, size, 0);
+FROZEN(SWF_IntegrityEntry, kind, 4);
+FROZEN(SWF_IntegrityEntry, address, 8);
+FROZEN(SWF_IntegrityEntry, offset, 16);
+FROZEN(SWF_IntegrityEntry, family, 24);
+FROZEN(SWF_IntegrityEntry, module, 32);
+FROZEN(SWF_IntegrityEntry, target, 40);
 
 FROZEN(SWF_EventHeader, size, 0);
 FROZEN(SWF_EventHeader, id, 4);

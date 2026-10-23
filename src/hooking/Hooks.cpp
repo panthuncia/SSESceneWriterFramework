@@ -1,6 +1,7 @@
 #include "hooking/Hooks.h"
 
 #include "core/Log.h"
+#include "hooking/Integrity.h"
 
 #include <Windows.h>
 #include <detours/detours.h>
@@ -73,6 +74,10 @@ namespace swf::inline SWF_NAMESPACE::hooking
 		if (DetourTransactionBegin() != NO_ERROR)
 			return false;
 		DetourUpdateThread(GetCurrentThread());
+		// The code Detours will patch: the target, past a jump it skips.
+		std::vector<std::uintptr_t> starts;
+		for (const Detour& detour : detours)
+			starts.push_back(reinterpret_cast<std::uintptr_t>(DetourCodeFromPointer(*detour.original, nullptr)));
 		for (const Detour& detour : detours) {
 			if (const LONG error = DetourAttach(detour.original, detour.thunk); error != NO_ERROR) {
 				DetourTransactionAbort();
@@ -84,6 +89,8 @@ namespace swf::inline SWF_NAMESPACE::hooking
 			log::Warn("{}: the detours could not commit (error {})", what, error);
 			return false;
 		}
+		for (const std::uintptr_t start : starts)
+			Record(SWF_SITE_DETOUR, start, 5);
 		return true;
 	}
 
@@ -95,6 +102,7 @@ namespace swf::inline SWF_NAMESPACE::hooking
 			VirtualProtect(swap.slot, sizeof(*swap.slot), PAGE_READWRITE, &old);
 			*swap.slot = reinterpret_cast<std::uintptr_t>(swap.thunk);
 			VirtualProtect(swap.slot, sizeof(*swap.slot), old, &old);
+			Record(SWF_SITE_SLOT, reinterpret_cast<std::uintptr_t>(swap.slot), sizeof(*swap.slot));
 		}
 	}
 

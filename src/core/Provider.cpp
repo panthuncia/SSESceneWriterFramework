@@ -4,6 +4,7 @@
 #include "core/Log.h"
 #include "families/Families.h"
 #include "families/Stores.h"
+#include "hooking/Integrity.h"
 #include "hooking/Memory.h"
 #include "swf/swf_client.h"
 
@@ -138,6 +139,11 @@ namespace swf::inline SWF_NAMESPACE::provider
 			return SWF_OK;
 		}
 
+		uint32_t CheckIntegrity(SWF_IntegrityFn fn, void* user)
+		{
+			return Ready() ? hooking::CheckIntegrity(fn, user) : 0;
+		}
+
 		constexpr SWF_Api kApi{
 			sizeof(SWF_Api),
 			SWF_ABI_MINOR,
@@ -150,6 +156,7 @@ namespace swf::inline SWF_NAMESPACE::provider
 			&NotifyWritten,
 			&SiteCount,
 			&ResolveSite,
+			&CheckIntegrity,
 		};
 
 		bool OtherCandidateActive()
@@ -224,7 +231,10 @@ namespace swf::inline SWF_NAMESPACE::provider
 		for (const Family& family : families) {
 			if (!(verified & family.cap))
 				continue;
-			if (family.install())
+			hooking::SetFamily(family.name);
+			const bool ok = family.install();
+			hooking::SetFamily(nullptr);
+			if (ok)
 				installed |= family.cap;
 			else
 				log::Error("family '{}' verified but failed to install", family.name);

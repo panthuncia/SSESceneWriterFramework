@@ -7,11 +7,13 @@
 //   - a call-site rewrite after SWF's that keeps the previous call target (write_call<5>).
 //
 // Each case checks every hook ran, once, in the order the install order implies: the later hook
-// is the outer one.
+// is the outer one. The integrity check then reports exactly the patches rewritten after SWF's,
+// each traced to this executable, whose functions the foreign hooks are.
 #include "../common/FakeRtti.h"
 #include "core/Dispatch.h"
 #include "families/DetourFamilies.h"
 #include "hooking/Hooks.h"
+#include "hooking/Integrity.h"
 
 #include <Windows.h>
 #include <detours/detours.h>
@@ -334,6 +336,34 @@ int main()
 		reinterpret_cast<void (*)(void*)>(region + 0x500)(node);
 		Expect({ "engine update pass", moved.c_str() });
 		CHECK(updates == 2);
+	}
+
+	// ---- The integrity check: the four rewritten after SWF (FadeSetRange's and FadeSetLodType's
+	// detour jumps, slot 0x31, the first update pass's call), each leading into this executable.
+	{
+		struct Found
+		{
+			std::uint32_t kind;
+			std::uintptr_t address;
+			std::string module;
+		};
+		static std::vector<Found> found;
+		const std::uint32_t changed = hooking::CheckIntegrity(
+			[](const SWF_IntegrityEntry* entry, void*) { found.push_back({ entry->kind, entry->address, entry->module ? entry->module : "" }); }, nullptr);
+		char path[MAX_PATH]{};
+		std::string self(path, GetModuleFileNameA(nullptr, path, MAX_PATH));
+		self = self.substr(self.find_last_of("\\/") + 1);
+		CHECK(changed == 4 && found.size() == 4);
+		std::uint32_t detours = 0, slots = 0, sites = 0;
+		for (const Found& entry : found) {
+			if (entry.module != self)
+				std::fprintf(stderr, "kind %u at %p leads to '%s'\n", entry.kind, reinterpret_cast<void*>(entry.address), entry.module.c_str());
+			CHECK(entry.module == self);
+			detours += entry.kind == SWF_SITE_DETOUR;
+			slots += entry.kind == SWF_SITE_SLOT && entry.address == reinterpret_cast<std::uintptr_t>(&lighting.slots[0x31]);
+			sites += entry.kind == SWF_SITE_CALL;
+		}
+		CHECK(detours == 2 && slots == 1 && sites == 1);
 	}
 
 	std::puts("interop: all checks passed");

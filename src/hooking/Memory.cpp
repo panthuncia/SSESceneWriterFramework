@@ -1,6 +1,7 @@
 #include "hooking/Memory.h"
 
 #include "core/Log.h"
+#include "hooking/Integrity.h"
 
 #include <Windows.h>
 
@@ -88,6 +89,7 @@ namespace swf::inline SWF_NAMESPACE::hooking
 			const auto displacement = static_cast<std::int32_t>(reinterpret_cast<std::intptr_t>(code + entries[i]) - static_cast<std::intptr_t>(at + 5));
 			std::memcpy(patch.data() + 1, &displacement, sizeof(displacement));
 			WriteCode(at, patch.data(), sites[i].length);
+			Record(SWF_SITE_CALL, at, sites[i].length);
 		}
 		return code;
 	}
