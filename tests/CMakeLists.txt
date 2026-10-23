@@ -52,3 +52,11 @@ target_link_libraries(swf_detour_tests PRIVATE swf_test_core_a)
 swf_internal_compile(swf_detour_tests VERSION 0.1.0.0 DEFINITIONS SWF_TESTING)
 target_include_directories(swf_detour_tests PRIVATE ${DETOURS_INCLUDE_DIRS})
 add_test(NAME detour_families COMMAND swf_detour_tests)
+
+# Other plugins' hooks on SWF's targets, before and after SWF: Detours, hand-rolled prologue
+# hooks, slot swaps and call-site rewrites all chain.
+add_executable(swf_interop_tests interop/InteropTests.cpp)
+target_link_libraries(swf_interop_tests PRIVATE swf_test_core_a)
+swf_internal_compile(swf_interop_tests VERSION 0.1.0.0 DEFINITIONS SWF_TESTING)
+target_include_directories(swf_interop_tests PRIVATE ${DETOURS_INCLUDE_DIRS})
+add_test(NAME interop COMMAND swf_interop_tests)

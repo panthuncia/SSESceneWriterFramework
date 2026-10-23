@@ -2,6 +2,7 @@
 // data carrying real MSVC RTTI layouts (so VtableMatches reads them as it reads the game's), real
 // functions detoured by Detours, fake nodes with NiNode's child array at its AE offsets, and a
 // synthetic code region for the moves' call sites.
+#include "../common/FakeRtti.h"
 #include "core/Dispatch.h"
 #include "families/CallHook.h"
 #include "families/DetourFamilies.h"
@@ -10,67 +11,16 @@
 #include <Windows.h>
 
 #include <bit>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
 #include <string>
 #include <vector>
-
-#define CHECK(condition)                                                                       \
-	do {                                                                                       \
-		if (!(condition)) {                                                                    \
-			std::fprintf(stderr, "%s:%d: CHECK failed: %s\n", __FILE__, __LINE__, #condition); \
-			std::exit(1);                                                                      \
-		}                                                                                      \
-	} while (0)
 
 namespace
 {
 	using namespace swf;
+	using namespace fake;
+	using FakeVtable = fake::Vtable;
 
-	hooking::Image image;
 	std::vector<std::string> trace;  // what the "engine" functions did
-
-	// ---- Fake vtables with RTTI: [locator][slots...], the locator and type descriptor in this image.
-	struct FakeTypeDescriptor
-	{
-		void* vfptr;
-		void* spare;
-		char name[96];
-	};
-	struct FakeLocator
-	{
-		std::uint32_t signature, offset, cdOffset, typeDescriptor, classDescriptor, self;
-	};
-	struct FakeVtable
-	{
-		FakeLocator locator;
-		FakeTypeDescriptor type;
-		void* locatorPointer;  // slot -1
-		void* slots[0x40];
-	};
-	FakeVtable vtables[24];
-	int nextVtable = 0;
-
-	std::uint32_t Rva(const void* address)
-	{
-		return static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(address) - image.base);
-	}
-
-	FakeVtable& NewVtable(const char* rtti)
-	{
-		FakeVtable& vtable = vtables[nextVtable++];
-		strcpy_s(vtable.type.name, rtti);
-		vtable.locator.signature = 1;
-		vtable.locator.typeDescriptor = Rva(&vtable.type);
-		vtable.locatorPointer = &vtable.locator;
-		return vtable;
-	}
-
-	hooking::Vtable Ref(FakeVtable& vtable)
-	{
-		return { Rva(vtable.slots), vtable.type.name };
-	}
 
 	// ---- Fake nodes: vtable at +0, children data at +0x118, freeIdx at +0x122, userData at +0xF8.
 	struct FakeNode
@@ -89,12 +39,6 @@ namespace
 	};
 
 	FakeNode* NodeOf(void* self) { return reinterpret_cast<FakeNode*>(self); }
-
-	template <class... A>
-	void Call(FakeVtable& vtable, std::size_t slot, A... args)
-	{
-		reinterpret_cast<void (*)(A...)>(vtable.slots[slot])(args...);
-	}
 
 	// ---- The "engine" child edits (distinct bodies so the linker does not fold them).
 	__declspec(noinline) void NodeAttach(void* self, void* child, bool)
