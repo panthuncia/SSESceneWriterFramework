@@ -18,4 +18,7 @@ namespace swf::inline SWF_NAMESPACE
 
 	/// Every hook family, in install order.
 	std::span<const Family> Families();
+
+	/// The capability an event or filter id needs: 0 for none, ~0 for an unknown id.
+	SWF_Caps CapFor(uint32_t id, bool filter);
 }

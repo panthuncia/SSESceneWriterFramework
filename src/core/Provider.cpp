@@ -3,6 +3,8 @@
 #include "core/Dispatch.h"
 #include "core/Log.h"
 #include "families/Families.h"
+#include "families/Stores.h"
+#include "hooking/Memory.h"
 #include "swf/swf_client.h"
 
 #include <Windows.h>
@@ -27,6 +29,15 @@ namespace swf::inline SWF_NAMESPACE::provider
 		bool Ready()
 		{
 			return state.load(std::memory_order_acquire) == SWF_STATE_ACTIVE;
+		}
+
+		// SWF_OK if `id` is known and its family installed.
+		SWF_Result Supported(uint32_t id, bool filter)
+		{
+			const SWF_Caps needed = CapFor(id, filter);
+			if (needed == ~0ull)
+				return id == 0 || id >= dispatch::kMaxIds ? SWF_E_INVALID : SWF_E_UNSUPPORTED;
+			return (caps.load() & needed) == needed ? SWF_OK : SWF_E_UNSUPPORTED;
 		}
 
 		SWF_Result GetProviderInfo(SWF_ProviderInfo* out)
@@ -56,6 +67,8 @@ namespace swf::inline SWF_NAMESPACE::provider
 				return SWF_E_NOT_READY;
 			if (!fn || !phases || (phases & ~(SWF_PHASE_PRE | SWF_PHASE_POST)))
 				return SWF_E_INVALID;
+			if (const SWF_Result supported = Supported(eventId, false); supported != SWF_OK)
+				return supported;
 			dispatch::Entry entry;
 			entry.event = fn;
 			entry.user = user;
@@ -75,6 +88,8 @@ namespace swf::inline SWF_NAMESPACE::provider
 				return SWF_E_NOT_READY;
 			if (!fn)
 				return SWF_E_INVALID;
+			if (const SWF_Result supported = Supported(filterId, true); supported != SWF_OK)
+				return supported;
 			dispatch::Entry entry;
 			entry.filter = fn;
 			entry.user = user;
@@ -102,6 +117,27 @@ namespace swf::inline SWF_NAMESPACE::provider
 			return SWF_OK;
 		}
 
+		uint32_t SiteCount(uint32_t eventId)
+		{
+			return Ready() ? stores::SiteCount(eventId) : 0;
+		}
+
+		SWF_Result ResolveSite(uintptr_t address, uint32_t* eventId, uint32_t* site, uint32_t* siteOffset)
+		{
+			if (!Ready())
+				return SWF_E_NOT_READY;
+			uint32_t id = 0, index = 0, offset = 0;
+			if (!hooking::ResolveStub(address, id, index, offset))
+				return SWF_E_INVALID;
+			if (eventId)
+				*eventId = id;
+			if (site)
+				*site = index;
+			if (siteOffset)
+				*siteOffset = offset;
+			return SWF_OK;
+		}
+
 		constexpr SWF_Api kApi{
 			sizeof(SWF_Api),
 			SWF_ABI_MINOR,
@@ -112,6 +148,8 @@ namespace swf::inline SWF_NAMESPACE::provider
 			&AddFilter,
 			&RemoveFilter,
 			&NotifyWritten,
+			&SiteCount,
+			&ResolveSite,
 		};
 
 		bool OtherCandidateActive()

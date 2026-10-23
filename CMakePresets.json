@@ -6,7 +6,11 @@
 			"displayName": "Visual Studio 2026 x64",
 			"generator": "Visual Studio 18 2026",
 			"architecture": "x64",
-			"binaryDir": "${sourceDir}/build/${presetName}"
+			"binaryDir": "${sourceDir}/build/${presetName}",
+			"toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+			"cacheVariables": {
+				"VCPKG_TARGET_TRIPLET": "x64-windows-static-md"
+			}
 		}
 	],
 	"buildPresets": [

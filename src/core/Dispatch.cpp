@@ -36,6 +36,7 @@ namespace swf::inline SWF_NAMESPACE::dispatch
 		++next->count;
 
 		lists[id].store(next, std::memory_order_release);
+		counts[id].store(next->count, std::memory_order_release);
 		*out = (static_cast<uint64_t>(id) << kIdShift) | added.serial;
 		return SWF_OK;
 	}
@@ -65,6 +66,7 @@ namespace swf::inline SWF_NAMESPACE::dispatch
 			return SWF_E_INVALID;
 		}
 		lists[id].store(next, std::memory_order_release);
+		counts[id].store(next->count, std::memory_order_release);
 		return SWF_OK;
 	}
 

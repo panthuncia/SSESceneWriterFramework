@@ -41,8 +41,13 @@ namespace swf::inline SWF_NAMESPACE::dispatch
 			return id < kMaxIds ? lists[id].load(std::memory_order_acquire) : nullptr;
 		}
 
+		/// A word that is nonzero while `id` has entries, at a fixed address for the process;
+		/// store stubs test it inline before calling into the dispatch.
+		const std::atomic<uint32_t>* CountWord(uint32_t id) const { return &counts[id]; }
+
 	private:
 		std::array<std::atomic<const List*>, kMaxIds> lists{};
+		std::array<std::atomic<uint32_t>, kMaxIds> counts{};
 		std::mutex mutex;
 		uint64_t nextSerial = 1;
 	};

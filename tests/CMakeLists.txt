@@ -33,3 +33,9 @@ foreach(scenario IN LISTS scenarios)
 	add_test(NAME election_${scenario} COMMAND swf_election_tests ${scenario}
 		WORKING_DIRECTORY "${SWF_TEST_BIN}")
 endforeach()
+
+# The store families' stubs, run against a synthetic image (links host a's core).
+add_executable(swf_store_tests stores/StoreTests.cpp)
+target_link_libraries(swf_store_tests PRIVATE swf_test_core_a xbyak::xbyak)
+swf_internal_compile(swf_store_tests VERSION 0.1.0.0 DEFINITIONS SWF_TESTING)
+add_test(NAME store_stubs COMMAND swf_store_tests)

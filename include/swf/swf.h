@@ -51,6 +51,9 @@ typedef int32_t SWF_Result;
 
 /* Capability bits: one per hook family that installed successfully. */
 typedef uint64_t SWF_Caps;
+#define SWF_CAP_HIDDEN (1ull << 0)       /* SWF_EVENT_HIDDEN, SWF_FILTER_SHOW */
+#define SWF_CAP_SWITCH_INDEX (1ull << 1) /* SWF_EVENT_SWITCH_INDEX */
+#define SWF_CAP_FADE_RESET (1ull << 2)   /* SWF_EVENT_FADE_RESET */
 
 /* Subscription phases. Function-hook events fire PRE and POST around the engine call;
  * store events fire POST only. A subscription may ask for both. */
@@ -58,7 +61,13 @@ typedef uint64_t SWF_Caps;
 #define SWF_PHASE_POST (1u << 1)
 
 /* Event ids. */
-#define SWF_EVENT_WRITTEN 1 /* SWF_WrittenEvent: a client reported a direct write */
+#define SWF_EVENT_WRITTEN 1      /* SWF_WrittenEvent: a client reported a direct write */
+#define SWF_EVENT_HIDDEN 2       /* SWF_HiddenEvent: an engine store changed NiAVObject::flags bit 0 */
+#define SWF_EVENT_SWITCH_INDEX 3 /* SWF_SwitchIndexEvent: an engine store changed NiSwitchNode::index */
+#define SWF_EVENT_FADE_RESET 4   /* SWF_FadeResetEvent: an engine store reset BSFadeNode::currentFade */
+
+/* Filter ids. A filter runs before the write and may veto it. */
+#define SWF_FILTER_SHOW 1 /* SWF_ShowFilterEvent: an engine LOD store about to clear kHidden */
 
 /* Field bits shared by events that describe which fields of an object changed. */
 typedef uint64_t SWF_Fields;
@@ -86,6 +95,47 @@ typedef struct SWF_WrittenEvent
 	void* object; /* engine object written (NiAVObject*, BSShaderProperty*, material...) */
 	SWF_Fields fields;
 } SWF_WrittenEvent;
+
+/* Engine stores. `site` indexes the provider's table for that event (stable within one
+ * implVersion; SiteCount gives the count); `siteOffset` is the store's offset from the
+ * game executable's image base. */
+typedef struct SWF_HiddenEvent
+{
+	SWF_EventHeader header;
+	void* object; /* NiAVObject*, after the store */
+	uint32_t site;
+	uint32_t siteOffset;
+	uint32_t hidden; /* bit 0's value after the store */
+	uint32_t reserved;
+} SWF_HiddenEvent;
+
+typedef struct SWF_SwitchIndexEvent
+{
+	SWF_EventHeader header;
+	void* node; /* NiSwitchNode*, after the store */
+	int32_t before;
+	int32_t after;
+	uint32_t site;
+	uint32_t siteOffset;
+} SWF_SwitchIndexEvent;
+
+typedef struct SWF_FadeResetEvent
+{
+	SWF_EventHeader header;
+	void* node; /* BSFadeNode*, after the store */
+	float value; /* currentFade stored: 0 or 1 */
+	uint32_t site;
+	uint32_t siteOffset;
+	uint32_t reserved;
+} SWF_FadeResetEvent;
+
+typedef struct SWF_ShowFilterEvent
+{
+	SWF_EventHeader header; /* header.id is SWF_FILTER_SHOW */
+	void* object; /* NiAVObject* about to be shown; a veto leaves it hidden, with no event */
+	uint32_t site;
+	uint32_t siteOffset;
+} SWF_ShowFilterEvent;
 
 /* Event callback. `scratch` is one word private to this subscription that survives from
  * the PRE to the POST dispatch of the same engine call; it starts at 0. */
@@ -126,6 +176,13 @@ typedef struct SWF_Api
 
 	/* Report a direct write to scene state SWF could not observe. Fires SWF_EVENT_WRITTEN. */
 	SWF_Result (*NotifyWritten)(void* object, SWF_Fields fields);
+
+	/* Number of engine sites behind an event id (0 if not installed or not a store event). */
+	uint32_t (*SiteCount)(uint32_t eventId);
+
+	/* Maps an instruction address inside one of SWF's store stubs back to the engine store it
+	 * replaced (for hardware-watch diagnostics). Any output pointer may be null. */
+	SWF_Result (*ResolveSite)(uintptr_t address, uint32_t* eventId, uint32_t* site, uint32_t* siteOffset);
 } SWF_Api;
 
 typedef struct SWF_CandidateInfo

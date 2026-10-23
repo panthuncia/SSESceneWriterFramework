@@ -9,12 +9,19 @@ include_guard(GLOBAL)
 include("${CMAKE_CURRENT_LIST_DIR}/SWFVersion.cmake")
 get_filename_component(SWF_ROOT "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
 
+if(NOT TARGET xbyak::xbyak)
+	find_package(xbyak CONFIG REQUIRED)
+endif()
+
 set(SWF_CORE_SOURCES
 	"${SWF_ROOT}/src/core/Candidate.cpp"
 	"${SWF_ROOT}/src/core/Dispatch.cpp"
 	"${SWF_ROOT}/src/core/Log.cpp"
 	"${SWF_ROOT}/src/core/Provider.cpp"
-	"${SWF_ROOT}/src/families/Families.cpp")
+	"${SWF_ROOT}/src/families/Families.cpp"
+	"${SWF_ROOT}/src/families/Stores.cpp"
+	"${SWF_ROOT}/src/hooking/Memory.cpp"
+	"${SWF_ROOT}/src/tables/Ae_1_6_1170.cpp")
 
 # Applies SWF's private include path, version defines and warnings to `target`.
 # VERSION overrides the implementation version (tests build several versions at once).
@@ -51,6 +58,7 @@ function(swf_embedded_library name)
 	add_library(${name} STATIC ${SWF_CORE_SOURCES})
 	target_include_directories(${name} PUBLIC "${SWF_ROOT}/include")
 	target_compile_features(${name} PUBLIC cxx_std_20)
+	target_link_libraries(${name} PRIVATE xbyak::xbyak)
 	swf_internal_compile(${name} VERSION "${ARG_VERSION}" DEFINITIONS ${ARG_DEFINITIONS})
 endfunction()
 
