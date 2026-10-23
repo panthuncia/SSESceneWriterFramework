@@ -9,7 +9,17 @@ It ships in two ways:
 
 Every copy in the process is a candidate. At SKSE `kPostLoad` they elect one provider: the newest copy that supports the running game version. That provider installs the hooks and serves the API to everyone. The algorithm is in [`include/swf/swf_client.h`](include/swf/swf_client.h).
 
-Status: pre-release (0.x). The ABI is not frozen until 1.0.0. No hook families yet, so the provider reports `caps none`.
+Status: pre-release (0.x). The ABI is not frozen until 1.0.0. Only the AE 1.6.1170 tables exist.
+
+## Hook families
+
+| Family | Engine sites | Event / filter |
+|---|---|---|
+| hidden | 464 stores to `NiAVObject::flags` (+0xF4) that can change bit 0 | `SWF_EVENT_HIDDEN`; `SWF_FILTER_SHOW` at the 4 LOD show stores |
+| switch-index | 10 stores to `NiSwitchNode::index` (+0x12C) | `SWF_EVENT_SWITCH_INDEX` (on change) |
+| fade-reset | 11 inline `BSFadeNode::currentFade` (+0x130) resets | `SWF_EVENT_FADE_RESET` |
+
+The provider checks every site's bytes before it writes any of them. A family whose sites another plugin has already changed is left out, and its `SWF_CAP_*` bit stays clear. Each client decides from `GetCaps()` whether it can run.
 
 ## Embedding
 
@@ -66,3 +76,5 @@ The tests cover the frozen ABI layout and the election, with each scenario in it
 - a candidate that loads late;
 - client-only connection;
 - dispatch order.
+
+A separate store test runs the stubs themselves. It builds a synthetic image from real table entries, patches it the same way the game would be patched, and executes the patched stores. It checks the stored values, the events, the show veto and site resolution.
