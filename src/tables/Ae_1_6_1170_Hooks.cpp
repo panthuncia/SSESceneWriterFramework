@@ -35,7 +35,32 @@ namespace swf::inline SWF_NAMESPACE::tables::ae_1_6_1170
 			f[SWF_HOOK_WEAPON_BLOOD_GEOMETRY] = 0x14ab580;
 			f[SWF_HOOK_LAND_SETUP_PROPERTIES] = 0x2ad800;
 			f[SWF_HOOK_LAND_BLEND_PARAMS] = 0x2ad0e0;
+			f[SWF_HOOK_FADE_SNAP] = 0x147aa20;
+			f[SWF_HOOK_ACTOR_UPDATE_3D_POSITION] = 0x69eb80;
+			f[SWF_HOOK_ACTOR_SKY_CELL_SKIN] = 0x663430;
+			f[SWF_HOOK_ACTOR_RAGDOLL_JOB] = 0x770dc0;
+			f[SWF_HOOK_LOD_SEGMENT_SHOW] = 0xe31130;
+			f[SWF_HOOK_LOD_SEGMENT_HIDE] = 0xe31160;
+			f[SWF_HOOK_LOD_SEGMENT_SHOW_ALL] = 0xe310b0;
+			f[SWF_HOOK_TREE_LOD_REFILL] = 0x504a40;
+			f[SWF_HOOK_TREE_ANIM_ADD] = 0x4376f0;
+			f[SWF_HOOK_TREE_ANIM_REMOVE] = 0x437840;
+			f[SWF_HOOK_TREE_ANIM_CLEAR] = 0x437ae0;
 			return f;
+		}
+
+		constexpr std::array<CallSites, SWF_HOOK_COUNT> Sites()
+		{
+			std::array<CallSites, SWF_HOOK_COUNT> s{};
+			// Every call of the segment writers: the active and large-reference grids' segment updates
+			// (FUN_1405110b0, FUN_1405112f0), two show-all callers (FUN_1404fdcf0, FUN_140509550), the
+			// LOD block builder (FUN_140e55790).
+			s[SWF_HOOK_LOD_SEGMENT_SHOW] = { { 0x511550, 0x511269 }, 2 };
+			s[SWF_HOOK_LOD_SEGMENT_HIDE] = { { 0x511544, 0x51125c }, 2 };
+			s[SWF_HOOK_LOD_SEGMENT_SHOW_ALL] = { { 0x4fde80, 0x509691, 0x511402, 0x5112b4, 0xe55ba3 }, 5 };
+			// The refill's: the block's attach (FUN_140503630), its visibility update (FUN_140503f70).
+			s[SWF_HOOK_TREE_LOD_REFILL] = { { 0x5037f6, 0x503fbf }, 2 };
+			return s;
 		}
 
 		constexpr HookTargets kTargets{
@@ -73,6 +98,17 @@ namespace swf::inline SWF_NAMESPACE::tables::ae_1_6_1170
 				{ 0x1ab73e0, ".?AVBSLightingShaderMaterialSnow@@" },
 				{ 0x1ab7458, ".?AVBSLightingShaderMaterialMultiLayerParallax@@" },
 			} },
+			.callSites = Sites(),
+			.actors = { {
+				{ 0x189d870, ".?AVActor@@" },
+				{ 0x18a5558, ".?AVCharacter@@" },
+				{ 0x18ab9c0, ".?AVPlayerCharacter@@" },
+			} },
+			.decalArrayEdits = { 0x1fdfb0, 0x1fdc80, 0x1fdcb0, 0x1fdd50, 0x1fde40 },
+			.instanceShape = { 0x19d2000, ".?AVBSMultiStreamInstanceTriShape@@" },
+			.effectFloatController = { 0x1ac4428, ".?AVBSEffectShaderPropertyFloatController@@" },
+			.effectColorController = { 0x1ac46c0, ".?AVBSEffectShaderPropertyColorController@@" },
+			.effectMaterial = { 0x1abfa18, ".?AVBSEffectShaderMaterial@@" },
 		};
 	}
 

@@ -62,6 +62,12 @@ typedef uint64_t SWF_Caps;
 #define SWF_CAP_PROPERTY_CALLS (1ull << 8)     /* SWF_HOOK_PROPERTY_*, SWF_HOOK_LIGHTING_*, emittance */
 #define SWF_CAP_GEOMETRY_CALLS (1ull << 9)     /* alpha, weapon blood, land */
 #define SWF_CAP_MATERIAL_CALLS (1ull << 10)    /* controllers' and materials' in-place writes */
+#define SWF_CAP_ACTOR_CALLS (1ull << 11)       /* SWF_HOOK_ACTOR_* */
+#define SWF_CAP_DECAL_CALLS (1ull << 12)       /* SWF_HOOK_DECAL_ARRAY_EDIT */
+#define SWF_CAP_LOD_SEGMENT_CALLS (1ull << 13) /* SWF_HOOK_LOD_SEGMENT_* */
+#define SWF_CAP_TREE_LOD_CALLS (1ull << 14)    /* SWF_HOOK_TREE_LOD_REFILL, SWF_HOOK_INSTANCE_* */
+#define SWF_CAP_TREE_ANIM_CALLS (1ull << 15)   /* SWF_HOOK_TREE_ANIM_*, SWF_FILTER_CALL(SWF_HOOK_TREE_ANIM_REMOVE) */
+#define SWF_CAP_EFFECT_CALLS (1ull << 16)      /* SWF_HOOK_EFFECT_* */
 
 /* Subscription phases. Function-hook events fire PRE and POST around the engine call;
  * store events fire POST only. A subscription may ask for both. */
@@ -80,6 +86,10 @@ typedef uint64_t SWF_Caps;
 
 /* Filter ids. A filter runs before the write and may veto it. */
 #define SWF_FILTER_SHOW 1 /* SWF_ShowFilterEvent: an engine LOD store about to clear kHidden */
+/* SWF_CallEvent before a vetoable engine call (marked "vetoable" in the hook list), with its
+ * arguments. A veto skips the call and both its events; the caller gets 0 back. */
+#define SWF_FILTER_CALL_BASE 64
+#define SWF_FILTER_CALL(hook) (SWF_FILTER_CALL_BASE + (hook))
 
 /* Field bits shared by events that describe which fields of an object changed. */
 typedef uint64_t SWF_Fields;
@@ -237,7 +247,35 @@ typedef struct SWF_CallEvent
 #define SWF_HOOK_MATERIAL_LOAD_TEXTURE_SET 33 /* slot 0x08 (material, uint64, BSTextureSet*) */
 #define SWF_HOOK_MATERIAL_CLEAR_TEXTURES 34   /* slot 0x09 (material) */
 #define SWF_HOOK_MATERIAL_RECEIVE_VALUES 35   /* slot 0x0A (material, bool, bool, bool, bool, bool) */
-#define SWF_HOOK_COUNT 36
+/* SWF_CAP_FADE_CALLS */
+#define SWF_HOOK_FADE_SNAP 36                 /* 0x147aa20 (node, camera) -> uint64: a fade node's placement snap */
+/* SWF_CAP_ACTOR_CALLS */
+#define SWF_HOOK_ACTOR_SET_ALPHA 37           /* Actor, Character, PlayerCharacter slot 0xE1 (actor, float alpha) */
+#define SWF_HOOK_ACTOR_UPDATE_3D_POSITION 38  /* 0x69eb80 Actor::UpdateActor3DPosition (actor) */
+#define SWF_HOOK_ACTOR_SKY_CELL_SKIN 39       /* 0x663430 (actor) -> uint64 */
+#define SWF_HOOK_ACTOR_RAGDOLL_JOB 40         /* 0x770dc0 (list): actor handles at list +0x30, their count at +0x40 */
+/* SWF_CAP_DECAL_CALLS */
+#define SWF_HOOK_DECAL_ARRAY_EDIT 41          /* a BGSDecalNode's decal array edits (node, ...): 0x1fdfb0 append, 0x1fdc80 and
+                                               * 0x1fdd50, 0x1fde40 erase, 0x1fdcb0 the geometry decal's update; args 1-3 are the
+                                               * argument registers as passed, meaningful only per function */
+/* SWF_CAP_LOD_SEGMENT_CALLS: every call of the three, at its call sites */
+#define SWF_HOOK_LOD_SEGMENT_SHOW 42          /* 0xe31130 (BSSubIndexTriShape*, uint64 segment) */
+#define SWF_HOOK_LOD_SEGMENT_HIDE 43          /* 0xe31160 (BSSubIndexTriShape*, uint64 segment) */
+#define SWF_HOOK_LOD_SEGMENT_SHOW_ALL 44      /* 0xe310b0 (BSSubIndexTriShape*) */
+/* SWF_CAP_TREE_LOD_CALLS */
+#define SWF_HOOK_TREE_LOD_REFILL 45           /* 0x504a40 at its two call sites (BGSDistantTreeBlock*, TreeGroup*) */
+#define SWF_HOOK_INSTANCE_ADD_GROUP 46        /* BSMultiStreamInstanceTriShape slot 0x3C (shape, uint32 count, const uint16* data,
+                                               * uint32 shorts, float radius) -> uint32 index */
+#define SWF_HOOK_INSTANCE_REMOVE_GROUP 47     /* slot 0x3D (shape, uint32 index) */
+/* SWF_CAP_TREE_ANIM_CALLS: the tree manager's animation list */
+#define SWF_HOOK_TREE_ANIM_ADD 48             /* 0x4376f0 (manager, BSLeafAnimNode*, uint64, uint64) */
+#define SWF_HOOK_TREE_ANIM_REMOVE 49          /* 0x437840 (manager, node) -> uint64; vetoable */
+#define SWF_HOOK_TREE_ANIM_CLEAR 50           /* 0x437ae0 (manager, uint64, uint64, uint64) -> uint64 */
+/* SWF_CAP_EFFECT_CALLS */
+#define SWF_HOOK_EFFECT_FLOAT_CONTROLLER_UPDATE 51 /* BSEffectShaderPropertyFloatController slot 0x27 (controller, data) */
+#define SWF_HOOK_EFFECT_COLOR_CONTROLLER_UPDATE 52 /* BSEffectShaderPropertyColorController slot 0x27 (controller, data) */
+#define SWF_HOOK_EFFECT_MATERIAL_COPY_MEMBERS 53   /* BSEffectShaderMaterial slot 0x02 (material, source) */
+#define SWF_HOOK_COUNT 54
 
 /* Event callback. `scratch` points to SWF_SCRATCH_WORDS words private to this subscription
  * and this engine call, zeroed before the first dispatch. For a PRE|POST subscription they

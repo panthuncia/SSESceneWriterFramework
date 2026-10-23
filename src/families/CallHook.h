@@ -24,6 +24,12 @@ namespace swf::inline SWF_NAMESPACE::calls
 			return static_cast<std::uint64_t>(value);
 	}
 
+	/// True for the hooks SWF_FILTER_CALL(hook) may veto.
+	constexpr bool Vetoable(std::uint32_t hook)
+	{
+		return hook == SWF_HOOK_TREE_ANIM_REMOVE;
+	}
+
 	/**
 	 * One engine function's hook: Thunk replaces it (a detour, or a vtable slot), and `original`
 	 * calls on. With no subscriber a call costs one list load. `Instance` tells apart hooks that
@@ -41,7 +47,10 @@ namespace swf::inline SWF_NAMESPACE::calls
 		static R Thunk(Args... args)
 		{
 			dispatch::Call call(SWF_EVENT_CALL(Hook));
-			if (call.Empty())
+			bool filtered = false;
+			if constexpr (Vetoable(Hook))
+				filtered = *dispatch::Filters().CountWord(SWF_FILTER_CALL(Hook)) != 0;
+			if (call.Empty() && !filtered)
 				return original(args...);
 			SWF_CallEvent event{};
 			event.header.size = sizeof(event);
@@ -50,6 +59,13 @@ namespace swf::inline SWF_NAMESPACE::calls
 			event.argCount = sizeof...(Args);
 			std::uint32_t i = 0;
 			((event.args[i++] = Word(args)), ...);
+			if (filtered) {
+				// The filters see the call event as the filter id; a veto skips the call and its events.
+				event.header.id = SWF_FILTER_CALL(Hook);
+				if (dispatch::Vetoed(SWF_FILTER_CALL(Hook), event.header))
+					return R();
+				event.header.id = SWF_EVENT_CALL(Hook);
+			}
 			call.Pre(event.header);
 			if constexpr (std::is_void_v<R>) {
 				original(args...);

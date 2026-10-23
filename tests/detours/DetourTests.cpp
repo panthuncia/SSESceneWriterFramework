@@ -136,6 +136,19 @@ namespace
 			...);
 	}
 
+	// ---- The tree animation list: add, a vetoable remove, clear.
+	__declspec(noinline) void AnimAdd(void*, void* node, std::uint64_t, std::uint64_t) { trace.push_back("anim add " + std::to_string(node != nullptr)); }
+	__declspec(noinline) std::uint64_t AnimRemove(void*, void*)
+	{
+		trace.push_back("anim remove");
+		return 7;
+	}
+	__declspec(noinline) std::uint64_t AnimClear(void*, std::uint64_t, std::uint64_t, std::uint64_t)
+	{
+		trace.push_back("anim clear");
+		return 9;
+	}
+
 	// ---- A standalone CallHook on a function with every argument kind.
 	__declspec(noinline) double Mixed(std::int32_t a, float b, void* c, bool d, std::uint8_t e, float f, std::int64_t g)
 	{
@@ -354,6 +367,89 @@ int main()
 		CHECK(trace.back() == "clear " + std::to_string(v) && callEvents.back().hook == SWF_HOOK_MATERIAL_CLEAR_TEXTURES && callEvents.back().args[0] == reinterpret_cast<std::uintptr_t>(&a));
 		Call(vtable, 0x0A, static_cast<void*>(&a), true, false, true, false, true);
 		CHECK(trace.back() == "receive " + std::to_string(v) + "e" && callEvents.back().argCount == 6 && callEvents.back().args[5] == 1);
+	}
+
+	// ---- Tree animation calls: the remove's filter vetoes the call and both its events.
+	{
+		targets.functions[SWF_HOOK_TREE_ANIM_ADD] = Rva(reinterpret_cast<const void*>(&AnimAdd));
+		targets.functions[SWF_HOOK_TREE_ANIM_REMOVE] = Rva(reinterpret_cast<const void*>(&AnimRemove));
+		targets.functions[SWF_HOOK_TREE_ANIM_CLEAR] = Rva(reinterpret_cast<const void*>(&AnimClear));
+		CHECK(detours::VerifyCalls(SWF_CAP_TREE_ANIM_CALLS, image, targets));
+		CHECK(detours::InstallCalls(SWF_CAP_TREE_ANIM_CALLS, image, targets));
+		for (std::uint32_t hook = SWF_HOOK_TREE_ANIM_ADD; hook <= SWF_HOOK_TREE_ANIM_CLEAR; ++hook)
+			Subscribe(SWF_EVENT_CALL(hook), SWF_PHASE_POST, record);
+		static void* held = nullptr;
+		dispatch::Entry filter;
+		filter.filter = [](const SWF_EventHeader* header, void*) -> std::int32_t {
+			const auto& event = *reinterpret_cast<const SWF_CallEvent*>(header);
+			CHECK(header->id == SWF_FILTER_CALL(SWF_HOOK_TREE_ANIM_REMOVE) && event.argCount == 2);
+			return reinterpret_cast<void*>(event.args[1]) == held;
+		};
+		SWF_Subscription subscription = 0;
+		CHECK(dispatch::Filters().Add(SWF_FILTER_CALL(SWF_HOOK_TREE_ANIM_REMOVE), filter, &subscription) == SWF_OK);
+		callEvents.clear();
+		int manager = 0, kept = 0, other = 0;
+		held = &kept;
+		const auto remove = reinterpret_cast<std::uint64_t (*)(void*, void*)>(&AnimRemove);
+		trace.clear();
+		CHECK(remove(&manager, &kept) == 0 && trace.empty() && callEvents.empty());
+		CHECK(remove(&manager, &other) == 7 && trace.back() == "anim remove" && callEvents.size() == 1 && callEvents[0].result == 7);
+		reinterpret_cast<void (*)(void*, void*, std::uint64_t, std::uint64_t)>(&AnimAdd)(&manager, &kept, 1, 2);
+		CHECK(trace.back() == "anim add 1" && callEvents.back().hook == SWF_HOOK_TREE_ANIM_ADD && callEvents.back().args[3] == 2);
+		CHECK(reinterpret_cast<std::uint64_t (*)(void*, std::uint64_t, std::uint64_t, std::uint64_t)>(&AnimClear)(&manager, 0, 0, 0) == 9);
+		CHECK(callEvents.back().hook == SWF_HOOK_TREE_ANIM_CLEAR && callEvents.back().result == 9);
+		CHECK(dispatch::Filters().Remove(subscription) == SWF_OK);
+		CHECK(remove(&manager, &kept) == 7);
+	}
+
+	// ---- LOD segment calls: hooked at their call sites, in a synthetic region; a site that calls
+	// elsewhere leaves the family out.
+	{
+		auto* region = static_cast<std::uint8_t*>(VirtualAlloc(nullptr, 0x1000, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE));
+		CHECK(region);
+		// The writers: `ret`. Each caller: `sub rsp, 0x28; call writer; add rsp, 0x28; ret`, its call at +4.
+		const std::uint32_t writers[] = { 0x000, 0x100, 0x200 };
+		for (const auto writer : writers)
+			region[writer] = 0xC3;
+		auto call = [&](std::uint32_t site, std::uint32_t to) {
+			const std::uint8_t frame[] = { 0x48, 0x83, 0xEC, 0x28 }, unframe[] = { 0x48, 0x83, 0xC4, 0x28, 0xC3 };
+			std::memcpy(region + site - 4, frame, sizeof(frame));
+			region[site] = 0xE8;
+			const auto displacement = static_cast<std::int32_t>(static_cast<std::int64_t>(to) - (site + 5));
+			std::memcpy(region + site + 1, &displacement, 4);
+			std::memcpy(region + site + 5, unframe, sizeof(unframe));
+		};
+		call(0x404, writers[0]);
+		call(0x424, writers[1]);
+		call(0x444, writers[2]);
+		call(0x464, writers[2]);
+		const hooking::Image regionImage{ reinterpret_cast<std::uintptr_t>(region), 0x1000 };
+		HookTargets lod{};
+		lod.functions[SWF_HOOK_LOD_SEGMENT_SHOW] = writers[0];
+		lod.functions[SWF_HOOK_LOD_SEGMENT_HIDE] = writers[1];
+		lod.functions[SWF_HOOK_LOD_SEGMENT_SHOW_ALL] = writers[2];
+		lod.callSites[SWF_HOOK_LOD_SEGMENT_SHOW] = { { 0x404 }, 1 };
+		lod.callSites[SWF_HOOK_LOD_SEGMENT_HIDE] = { { 0x424 }, 1 };
+		lod.callSites[SWF_HOOK_LOD_SEGMENT_SHOW_ALL] = { { 0x444, 0x464 }, 2 };
+		call(0x464, writers[1]);
+		CHECK(!detours::VerifyCalls(SWF_CAP_LOD_SEGMENT_CALLS, regionImage, lod));
+		call(0x464, writers[2]);
+		CHECK(detours::VerifyCalls(SWF_CAP_LOD_SEGMENT_CALLS, regionImage, lod));
+		CHECK(detours::InstallCalls(SWF_CAP_LOD_SEGMENT_CALLS, regionImage, lod));
+		for (std::uint32_t hook = SWF_HOOK_LOD_SEGMENT_SHOW; hook <= SWF_HOOK_LOD_SEGMENT_SHOW_ALL; ++hook)
+			Subscribe(SWF_EVENT_CALL(hook), SWF_PHASE_POST, record);
+		callEvents.clear();
+		int shape = 0;
+		reinterpret_cast<void (*)(void*, std::uint64_t)>(region + 0x400)(&shape, 3);
+		reinterpret_cast<void (*)(void*, std::uint64_t)>(region + 0x420)(&shape, 4);
+		reinterpret_cast<void (*)(void*)>(region + 0x440)(&shape);
+		reinterpret_cast<void (*)(void*)>(region + 0x460)(&shape);
+		CHECK(callEvents.size() == 4 && callEvents[0].hook == SWF_HOOK_LOD_SEGMENT_SHOW && callEvents[0].args[1] == 3);
+		CHECK(callEvents[1].hook == SWF_HOOK_LOD_SEGMENT_HIDE && callEvents[1].args[1] == 4 && callEvents[1].args[0] == reinterpret_cast<std::uintptr_t>(&shape));
+		CHECK(callEvents[2].hook == SWF_HOOK_LOD_SEGMENT_SHOW_ALL && callEvents[3].hook == SWF_HOOK_LOD_SEGMENT_SHOW_ALL);
+		// The writers themselves, called directly, are not hooked.
+		reinterpret_cast<void (*)(void*)>(region + writers[2])(&shape);
+		CHECK(callEvents.size() == 4);
 	}
 
 	std::puts("detour families: all checks passed");

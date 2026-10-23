@@ -51,4 +51,18 @@ namespace swf::inline SWF_NAMESPACE::hooking
 
 	/// Rewrites each 6-byte site (verified by the caller) as `call` to a stub that jumps to `thunk`.
 	bool PatchCallSites(const Image& image, std::span<const std::uint32_t> sites, std::uint8_t length, void* thunk);
+
+	/// One call site to rewrite as `call` to a stub that jumps to `thunk`.
+	struct SitePatch
+	{
+		std::uint32_t offset;  // from the image base
+		std::uint8_t length;   // >= 5
+		void* thunk;
+	};
+
+	/// Rewrites every site (verified by the caller), with one block of stubs: all or none.
+	bool PatchCallSites(const Image& image, std::span<const SitePatch> sites);
+
+	/// True if the 5 bytes at `site` are `call rel32` to `target`.
+	bool CallsTo(const Image& image, std::uint32_t site, std::uintptr_t target);
 }

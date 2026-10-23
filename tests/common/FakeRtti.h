@@ -37,7 +37,7 @@ namespace fake
 		void* locatorPointer;  // slot -1
 		void* slots[0x40];
 	};
-	inline Vtable vtables[24];
+	inline Vtable vtables[48];
 	inline int nextVtable = 0;
 
 	inline std::uint32_t Rva(const void* address)

@@ -21,6 +21,7 @@ namespace swf::inline SWF_NAMESPACE::detours
 		using FadeLodLevel = Hook<SWF_HOOK_FADE_LOD_LEVEL, void(void*, float)>;
 		using FadeSetRange = Hook<SWF_HOOK_FADE_SET_RANGE, void(void*, float, float)>;
 		using FadeSetLodType = Hook<SWF_HOOK_FADE_SET_LOD_TYPE, void(void*, std::uint8_t)>;
+		using FadeSnap = Hook<SWF_HOOK_FADE_SNAP, std::uint64_t(void*, void*)>;
 
 		using CellPlaceReference = Hook<SWF_HOOK_CELL_PLACE_REFERENCE, void(void*, void*)>;
 		using CellPlaceReferenceAt = Hook<SWF_HOOK_CELL_PLACE_REFERENCE_AT, void*(void*, void*, bool)>;
@@ -60,12 +61,39 @@ namespace swf::inline SWF_NAMESPACE::detours
 		template <std::uint32_t V>
 		using MaterialReceiveValues = Hook<SWF_HOOK_MATERIAL_RECEIVE_VALUES, void(void*, bool, bool, bool, bool, bool), V>;
 
-		/// What a family hooks: detours at function starts, and vtable slots swapped.
+		template <std::uint32_t V>
+		using ActorSetAlpha = Hook<SWF_HOOK_ACTOR_SET_ALPHA, void(void*, float), V>;
+		using ActorUpdate3DPosition = Hook<SWF_HOOK_ACTOR_UPDATE_3D_POSITION, void(void*)>;
+		using ActorSkyCellSkin = Hook<SWF_HOOK_ACTOR_SKY_CELL_SKIN, std::uint64_t(void*)>;
+		using ActorRagdollJob = Hook<SWF_HOOK_ACTOR_RAGDOLL_JOB, void(void*)>;
+
+		template <std::uint32_t V>
+		using DecalArrayEdit = Hook<SWF_HOOK_DECAL_ARRAY_EDIT, void(void*, void*, void*, void*), V>;
+
+		using LodSegmentShow = Hook<SWF_HOOK_LOD_SEGMENT_SHOW, void(void*, std::uint64_t)>;
+		using LodSegmentHide = Hook<SWF_HOOK_LOD_SEGMENT_HIDE, void(void*, std::uint64_t)>;
+		using LodSegmentShowAll = Hook<SWF_HOOK_LOD_SEGMENT_SHOW_ALL, void(void*)>;
+
+		using TreeLodRefill = Hook<SWF_HOOK_TREE_LOD_REFILL, void(void*, void*)>;
+		using InstanceAddGroup = Hook<SWF_HOOK_INSTANCE_ADD_GROUP, std::uint32_t(void*, std::uint32_t, const std::uint16_t*, std::uint32_t, float)>;
+		using InstanceRemoveGroup = Hook<SWF_HOOK_INSTANCE_REMOVE_GROUP, void(void*, std::uint32_t)>;
+
+		using TreeAnimAdd = Hook<SWF_HOOK_TREE_ANIM_ADD, void(void*, void*, std::uint64_t, std::uint64_t)>;
+		using TreeAnimRemove = Hook<SWF_HOOK_TREE_ANIM_REMOVE, std::uint64_t(void*, void*)>;
+		using TreeAnimClear = Hook<SWF_HOOK_TREE_ANIM_CLEAR, std::uint64_t(void*, std::uint64_t, std::uint64_t, std::uint64_t)>;
+
+		using EffectFloatControllerUpdate = Hook<SWF_HOOK_EFFECT_FLOAT_CONTROLLER_UPDATE, void(void*, void*)>;
+		using EffectColorControllerUpdate = Hook<SWF_HOOK_EFFECT_COLOR_CONTROLLER_UPDATE, void(void*, void*)>;
+		using EffectMaterialCopyMembers = Hook<SWF_HOOK_EFFECT_MATERIAL_COPY_MEMBERS, void(void*, void*)>;
+
+		/// What a family hooks: detours at function starts, vtable slots swapped, and call sites.
 		struct Plan
 		{
 			std::vector<hooking::Detour> detours;
 			std::vector<hooking::SlotSwap> swaps;
-			std::vector<std::uintptr_t> targets;  // every function a detour starts at
+			std::vector<hooking::SitePatch> sites;
+			std::vector<std::uintptr_t> siteTargets;  // the function each site calls
+			std::vector<std::uintptr_t> targets;      // every function a detour starts at, or a site calls
 			std::vector<hooking::Vtable> vtables;
 		};
 
@@ -82,6 +110,26 @@ namespace swf::inline SWF_NAMESPACE::detours
 		{
 			plan.swaps.push_back({ hooking::SlotAddress(image, vtable, slot), H::OriginalSlot(), H::ThunkAddress() });
 			plan.vtables.push_back(vtable);
+		}
+
+		// Every call site of the hook's function, rewritten to call H's thunk, which calls on to the function.
+		template <class H>
+		void PatchAt(Plan& plan, const hooking::Image& image, const HookTargets& targets, std::uint32_t hook)
+		{
+			const std::uintptr_t target = image.base + targets.functions[hook];
+			H::original = reinterpret_cast<decltype(H::original)>(target);
+			const CallSites& sites = targets.callSites[hook];
+			for (std::uint32_t i = 0; i < sites.count; ++i) {
+				plan.sites.push_back({ sites.offsets[i], 5, H::ThunkAddress() });
+				plan.siteTargets.push_back(target);
+			}
+			plan.targets.push_back(target);
+		}
+
+		template <std::uint32_t... V>
+		void DetourDecals(Plan& plan, const hooking::Image& image, const HookTargets& targets, std::integer_sequence<std::uint32_t, V...>)
+		{
+			(DetourAt<DecalArrayEdit<V>>(plan, image.base + targets.decalArrayEdits[V]), ...);
 		}
 
 		template <std::uint32_t... V>
@@ -107,6 +155,7 @@ namespace swf::inline SWF_NAMESPACE::detours
 				DetourAt<FadeLodLevel>(plan, image.base + targets.functions[SWF_HOOK_FADE_LOD_LEVEL]);
 				DetourAt<FadeSetRange>(plan, image.base + targets.functions[SWF_HOOK_FADE_SET_RANGE]);
 				DetourAt<FadeSetLodType>(plan, image.base + targets.functions[SWF_HOOK_FADE_SET_LOD_TYPE]);
+				DetourAt<FadeSnap>(plan, image.base + targets.functions[SWF_HOOK_FADE_SNAP]);
 				return true;
 			case SWF_CAP_NODE_CALLS:
 				DetourAt<CellPlaceReference>(plan, image.base + targets.functions[SWF_HOOK_CELL_PLACE_REFERENCE]);
@@ -143,6 +192,37 @@ namespace swf::inline SWF_NAMESPACE::detours
 				SwapSlot<ColorControllerUpdate>(plan, image, targets.colorController, 0x27);
 				SwapMaterials(plan, image, targets, std::make_integer_sequence<std::uint32_t, 14>{});
 				return true;
+			case SWF_CAP_ACTOR_CALLS:
+				SwapSlot<ActorSetAlpha<0>>(plan, image, targets.actors[0], 0xE1);
+				SwapSlot<ActorSetAlpha<1>>(plan, image, targets.actors[1], 0xE1);
+				SwapSlot<ActorSetAlpha<2>>(plan, image, targets.actors[2], 0xE1);
+				DetourAt<ActorUpdate3DPosition>(plan, image.base + targets.functions[SWF_HOOK_ACTOR_UPDATE_3D_POSITION]);
+				DetourAt<ActorSkyCellSkin>(plan, image.base + targets.functions[SWF_HOOK_ACTOR_SKY_CELL_SKIN]);
+				DetourAt<ActorRagdollJob>(plan, image.base + targets.functions[SWF_HOOK_ACTOR_RAGDOLL_JOB]);
+				return true;
+			case SWF_CAP_DECAL_CALLS:
+				DetourDecals(plan, image, targets, std::make_integer_sequence<std::uint32_t, 5>{});
+				return true;
+			case SWF_CAP_LOD_SEGMENT_CALLS:
+				PatchAt<LodSegmentShow>(plan, image, targets, SWF_HOOK_LOD_SEGMENT_SHOW);
+				PatchAt<LodSegmentHide>(plan, image, targets, SWF_HOOK_LOD_SEGMENT_HIDE);
+				PatchAt<LodSegmentShowAll>(plan, image, targets, SWF_HOOK_LOD_SEGMENT_SHOW_ALL);
+				return true;
+			case SWF_CAP_TREE_LOD_CALLS:
+				PatchAt<TreeLodRefill>(plan, image, targets, SWF_HOOK_TREE_LOD_REFILL);
+				SwapSlot<InstanceAddGroup>(plan, image, targets.instanceShape, 0x3C);
+				SwapSlot<InstanceRemoveGroup>(plan, image, targets.instanceShape, 0x3D);
+				return true;
+			case SWF_CAP_TREE_ANIM_CALLS:
+				DetourAt<TreeAnimAdd>(plan, image.base + targets.functions[SWF_HOOK_TREE_ANIM_ADD]);
+				DetourAt<TreeAnimRemove>(plan, image.base + targets.functions[SWF_HOOK_TREE_ANIM_REMOVE]);
+				DetourAt<TreeAnimClear>(plan, image.base + targets.functions[SWF_HOOK_TREE_ANIM_CLEAR]);
+				return true;
+			case SWF_CAP_EFFECT_CALLS:
+				SwapSlot<EffectFloatControllerUpdate>(plan, image, targets.effectFloatController, 0x27);
+				SwapSlot<EffectColorControllerUpdate>(plan, image, targets.effectColorController, 0x27);
+				SwapSlot<EffectMaterialCopyMembers>(plan, image, targets.effectMaterial, 0x02);
+				return true;
 			default:
 				return false;
 			}
@@ -161,6 +241,18 @@ namespace swf::inline SWF_NAMESPACE::detours
 				return "geometry calls";
 			case SWF_CAP_MATERIAL_CALLS:
 				return "material calls";
+			case SWF_CAP_ACTOR_CALLS:
+				return "actor calls";
+			case SWF_CAP_DECAL_CALLS:
+				return "decal calls";
+			case SWF_CAP_LOD_SEGMENT_CALLS:
+				return "LOD segment calls";
+			case SWF_CAP_TREE_LOD_CALLS:
+				return "tree LOD calls";
+			case SWF_CAP_TREE_ANIM_CALLS:
+				return "tree animation calls";
+			case SWF_CAP_EFFECT_CALLS:
+				return "effect calls";
 			default:
 				return "calls";
 			}
@@ -184,6 +276,13 @@ namespace swf::inline SWF_NAMESPACE::detours
 				return false;
 			}
 		}
+		// A call site another plugin rewrote no longer calls the engine function: the family is left out.
+		for (std::size_t i = 0; i < plan.sites.size(); ++i) {
+			if (!hooking::CallsTo(image, plan.sites[i].offset, plan.siteTargets[i])) {
+				log::Warn("{}: the call at +{:#x} is not the engine's call of +{:#x}", NameOf(family), plan.sites[i].offset, plan.siteTargets[i] - image.base);
+				return false;
+			}
+		}
 		return true;
 	}
 
@@ -197,8 +296,12 @@ namespace swf::inline SWF_NAMESPACE::detours
 				return false;
 		if (!hooking::AttachAll(plan.detours, NameOf(family)))
 			return false;
+		if (!plan.sites.empty() && !hooking::PatchCallSites(image, plan.sites)) {
+			log::Error("{}: the call sites could not be patched{}", NameOf(family), plan.detours.empty() ? "" : " (its detours are in)");
+			return false;
+		}
 		hooking::SwapAll(plan.swaps);
-		log::Info("{}: {} detours, {} vtable slots", NameOf(family), plan.detours.size(), plan.swaps.size());
+		log::Info("{}: {} detours, {} vtable slots, {} call sites", NameOf(family), plan.detours.size(), plan.swaps.size(), plan.sites.size());
 		return true;
 	}
 
@@ -214,6 +317,20 @@ namespace swf::inline SWF_NAMESPACE::detours
 			return SWF_CAP_GEOMETRY_CALLS;
 		if (hook >= SWF_HOOK_FLOAT_CONTROLLER_UPDATE && hook <= SWF_HOOK_MATERIAL_RECEIVE_VALUES)
 			return SWF_CAP_MATERIAL_CALLS;
+		if (hook == SWF_HOOK_FADE_SNAP)
+			return SWF_CAP_FADE_CALLS;
+		if (hook >= SWF_HOOK_ACTOR_SET_ALPHA && hook <= SWF_HOOK_ACTOR_RAGDOLL_JOB)
+			return SWF_CAP_ACTOR_CALLS;
+		if (hook == SWF_HOOK_DECAL_ARRAY_EDIT)
+			return SWF_CAP_DECAL_CALLS;
+		if (hook >= SWF_HOOK_LOD_SEGMENT_SHOW && hook <= SWF_HOOK_LOD_SEGMENT_SHOW_ALL)
+			return SWF_CAP_LOD_SEGMENT_CALLS;
+		if (hook >= SWF_HOOK_TREE_LOD_REFILL && hook <= SWF_HOOK_INSTANCE_REMOVE_GROUP)
+			return SWF_CAP_TREE_LOD_CALLS;
+		if (hook >= SWF_HOOK_TREE_ANIM_ADD && hook <= SWF_HOOK_TREE_ANIM_CLEAR)
+			return SWF_CAP_TREE_ANIM_CALLS;
+		if (hook >= SWF_HOOK_EFFECT_FLOAT_CONTROLLER_UPDATE && hook <= SWF_HOOK_EFFECT_MATERIAL_COPY_MEMBERS)
+			return SWF_CAP_EFFECT_CALLS;
 		return 0;
 	}
 }

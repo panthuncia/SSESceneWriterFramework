@@ -1,5 +1,6 @@
 #include "families/Families.h"
 
+#include "families/CallHook.h"
 #include "families/DetourFamilies.h"
 #include "families/Stores.h"
 #include "tables/HookTargets.h"
@@ -44,6 +45,12 @@ namespace swf::inline SWF_NAMESPACE
 			{ "property-calls", SWF_CAP_PROPERTY_CALLS, false, &VerifyCalls<SWF_CAP_PROPERTY_CALLS>, &InstallCalls<SWF_CAP_PROPERTY_CALLS> },
 			{ "geometry-calls", SWF_CAP_GEOMETRY_CALLS, false, &VerifyCalls<SWF_CAP_GEOMETRY_CALLS>, &InstallCalls<SWF_CAP_GEOMETRY_CALLS> },
 			{ "material-calls", SWF_CAP_MATERIAL_CALLS, false, &VerifyCalls<SWF_CAP_MATERIAL_CALLS>, &InstallCalls<SWF_CAP_MATERIAL_CALLS> },
+			{ "actor-calls", SWF_CAP_ACTOR_CALLS, false, &VerifyCalls<SWF_CAP_ACTOR_CALLS>, &InstallCalls<SWF_CAP_ACTOR_CALLS> },
+			{ "decal-calls", SWF_CAP_DECAL_CALLS, false, &VerifyCalls<SWF_CAP_DECAL_CALLS>, &InstallCalls<SWF_CAP_DECAL_CALLS> },
+			{ "lod-segment-calls", SWF_CAP_LOD_SEGMENT_CALLS, false, &VerifyCalls<SWF_CAP_LOD_SEGMENT_CALLS>, &InstallCalls<SWF_CAP_LOD_SEGMENT_CALLS> },
+			{ "tree-lod-calls", SWF_CAP_TREE_LOD_CALLS, false, &VerifyCalls<SWF_CAP_TREE_LOD_CALLS>, &InstallCalls<SWF_CAP_TREE_LOD_CALLS> },
+			{ "tree-anim-calls", SWF_CAP_TREE_ANIM_CALLS, false, &VerifyCalls<SWF_CAP_TREE_ANIM_CALLS>, &InstallCalls<SWF_CAP_TREE_ANIM_CALLS> },
+			{ "effect-calls", SWF_CAP_EFFECT_CALLS, false, &VerifyCalls<SWF_CAP_EFFECT_CALLS>, &InstallCalls<SWF_CAP_EFFECT_CALLS> },
 		};
 	}
 
@@ -54,8 +61,13 @@ namespace swf::inline SWF_NAMESPACE
 
 	SWF_Caps CapFor(uint32_t id, bool filter)
 	{
-		if (filter)
-			return id == SWF_FILTER_SHOW ? SWF_CAP_HIDDEN : ~0ull;
+		if (filter) {
+			if (id == SWF_FILTER_SHOW)
+				return SWF_CAP_HIDDEN;
+			if (id > SWF_FILTER_CALL_BASE && id < SWF_FILTER_CALL(SWF_HOOK_COUNT) && calls::Vetoable(id - SWF_FILTER_CALL_BASE))
+				return detours::CallFamilyOf(id - SWF_FILTER_CALL_BASE);
+			return ~0ull;
+		}
 		if (id > SWF_EVENT_CALL_BASE && id < SWF_EVENT_CALL(SWF_HOOK_COUNT)) {
 			const SWF_Caps family = detours::CallFamilyOf(id - SWF_EVENT_CALL_BASE);
 			return family ? family : ~0ull;

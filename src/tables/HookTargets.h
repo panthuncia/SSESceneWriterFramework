@@ -7,6 +7,13 @@
 
 namespace swf::inline SWF_NAMESPACE
 {
+	/// Call sites of one function, hooked there instead of at its start.
+	struct CallSites
+	{
+		std::array<std::uint32_t, 8> offsets;  // `call rel32` to the hook's function
+		std::uint32_t count;
+	};
+
 	/// The engine functions and vtables the detour families hook, for one runtime.
 	struct HookTargets
 	{
@@ -30,6 +37,15 @@ namespace swf::inline SWF_NAMESPACE
 		hooking::Vtable floatController;     // slot 0x27
 		hooking::Vtable colorController;     // slot 0x27
 		std::array<hooking::Vtable, 14> lightingMaterials;  // slots 0x02, 0x08-0x0A
+
+		// Feature families.
+		std::array<CallSites, SWF_HOOK_COUNT> callSites;  // per site-hooked SWF_HOOK_*: the calls of functions[hook]
+		std::array<hooking::Vtable, 3> actors;            // Actor, Character, PlayerCharacter: slot 0xE1
+		std::array<std::uint32_t, 5> decalArrayEdits;     // SWF_HOOK_DECAL_ARRAY_EDIT's functions
+		hooking::Vtable instanceShape;                    // BSMultiStreamInstanceTriShape: slots 0x3C, 0x3D
+		hooking::Vtable effectFloatController;            // slot 0x27
+		hooking::Vtable effectColorController;            // slot 0x27
+		hooking::Vtable effectMaterial;                   // slot 0x02
 	};
 
 	namespace tables::ae_1_6_1170

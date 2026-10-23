@@ -100,25 +100,43 @@ namespace swf::inline SWF_NAMESPACE::hooking
 
 	bool PatchCallSites(const Image& image, std::span<const std::uint32_t> sites, std::uint8_t length, void* thunk)
 	{
+		std::vector<SitePatch> patches;
+		for (const std::uint32_t site : sites)
+			patches.push_back({ site, length, thunk });
+		return PatchCallSites(image, patches);
+	}
+
+	bool PatchCallSites(const Image& image, std::span<const SitePatch> sites)
+	{
 		// One stub per site (the call's rel32 must reach it): `mov rax, thunk; jmp rax`. rax is the
-		// call's return register, so the original indirect call through it leaves it free.
+		// call's return register, so neither a direct call nor an indirect one through it needs it.
 		struct Stubs : Xbyak::CodeGenerator
 		{
-			Stubs(std::size_t count, void* target, std::vector<std::size_t>& entries) :
-				Xbyak::CodeGenerator(count * 16 + 16)
+			Stubs(std::span<const SitePatch> sites, std::vector<std::size_t>& entries) :
+				Xbyak::CodeGenerator(sites.size() * 16 + 16)
 			{
-				for (std::size_t i = 0; i < count; ++i) {
+				for (const SitePatch& site : sites) {
 					entries.push_back(getSize());
-					mov(rax, reinterpret_cast<std::uintptr_t>(target));
+					mov(rax, reinterpret_cast<std::uintptr_t>(site.thunk));
 					jmp(rax);
 				}
 			}
 		};
 		std::vector<std::size_t> entries;
-		Stubs stubs(sites.size(), thunk, entries);
+		Stubs stubs(sites, entries);
 		std::vector<CallSite> callSites;
-		for (const std::uint32_t site : sites)
-			callSites.push_back({ site, length });
+		for (const SitePatch& site : sites)
+			callSites.push_back({ site.offset, site.length });
 		return PatchCalls(image, callSites, std::span(stubs.getCode(), stubs.getSize()), entries) != nullptr;
+	}
+
+	bool CallsTo(const Image& image, std::uint32_t site, std::uintptr_t target)
+	{
+		if (static_cast<std::size_t>(site) + 5 > image.size)
+			return false;
+		const auto* code = reinterpret_cast<const std::uint8_t*>(image.base + site);
+		std::int32_t displacement = 0;
+		std::memcpy(&displacement, code + 1, sizeof(displacement));
+		return code[0] == 0xE8 && image.base + site + 5 + displacement == target;
 	}
 }
