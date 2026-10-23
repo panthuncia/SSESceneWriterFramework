@@ -33,6 +33,9 @@ namespace swf::inline SWF_NAMESPACE::detours
 		using HavokNodeTransform = Hook<SWF_HOOK_HAVOK_NODE_TRANSFORM, void(void*, const void*)>;
 		using DismemberPartition = Hook<SWF_HOOK_DISMEMBER_PARTITION, void(void*, std::uint16_t, bool)>;
 		using BipedDismemberPartitions = Hook<SWF_HOOK_BIPED_DISMEMBER_PARTITIONS, void(void*, void*, void*, std::int32_t, bool)>;
+		using HavokInit = Hook<SWF_HOOK_HAVOK_INIT, void(void*, void*, void*)>;
+		using ReferenceDisable = Hook<SWF_HOOK_REFERENCE_DISABLE, bool(void*, bool, bool, void*, std::uint32_t)>;
+		using EnableCommand = Hook<SWF_HOOK_ENABLE_COMMAND, bool(void*, void*, void*, void*, void*, void*, void*, void*)>;
 
 		using PropertySetFlags = Hook<SWF_HOOK_PROPERTY_SET_FLAGS, void(void*, std::uint8_t, bool)>;
 		using PropertySetMaterial = Hook<SWF_HOOK_PROPERTY_SET_MATERIAL, void(void*, void*, bool)>;
@@ -168,6 +171,9 @@ namespace swf::inline SWF_NAMESPACE::detours
 				DetourAt<HavokNodeTransform>(plan, image.base + targets.functions[SWF_HOOK_HAVOK_NODE_TRANSFORM]);
 				DetourAt<DismemberPartition>(plan, image.base + targets.functions[SWF_HOOK_DISMEMBER_PARTITION]);
 				DetourAt<BipedDismemberPartitions>(plan, image.base + targets.functions[SWF_HOOK_BIPED_DISMEMBER_PARTITIONS]);
+				DetourAt<HavokInit>(plan, image.base + targets.functions[SWF_HOOK_HAVOK_INIT]);
+				DetourAt<ReferenceDisable>(plan, image.base + targets.functions[SWF_HOOK_REFERENCE_DISABLE]);
+				DetourAt<EnableCommand>(plan, image.base + targets.functions[SWF_HOOK_ENABLE_COMMAND]);
 				return true;
 			case SWF_CAP_PROPERTY_CALLS:
 				DetourAt<PropertySetFlags>(plan, image.base + targets.functions[SWF_HOOK_PROPERTY_SET_FLAGS]);
@@ -309,7 +315,7 @@ namespace swf::inline SWF_NAMESPACE::detours
 	{
 		if (hook >= SWF_HOOK_FADE_ON_VISIBLE && hook <= SWF_HOOK_FADE_SET_LOD_TYPE)
 			return SWF_CAP_FADE_CALLS;
-		if (hook >= SWF_HOOK_CELL_PLACE_REFERENCE && hook <= SWF_HOOK_BIPED_DISMEMBER_PARTITIONS)
+		if ((hook >= SWF_HOOK_CELL_PLACE_REFERENCE && hook <= SWF_HOOK_BIPED_DISMEMBER_PARTITIONS) || (hook >= SWF_HOOK_HAVOK_INIT && hook <= SWF_HOOK_ENABLE_COMMAND))
 			return SWF_CAP_NODE_CALLS;
 		if (hook >= SWF_HOOK_PROPERTY_SET_FLAGS && hook <= SWF_HOOK_SKY_SET_COLOR)
 			return SWF_CAP_PROPERTY_CALLS;

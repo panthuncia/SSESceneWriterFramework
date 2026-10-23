@@ -28,7 +28,7 @@ set_target_properties(swf_election_tests PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${
 add_dependencies(swf_election_tests ${host_targets} swf_client_only)
 
 set(scenarios order_abc order_cba fallback all_fail pin_host pin_version disabled
-	unsupported_runtime late_candidate client_only dispatch)
+	unsupported_runtime late_candidate client_only dispatch scene_write)
 foreach(scenario IN LISTS scenarios)
 	add_test(NAME election_${scenario} COMMAND swf_election_tests ${scenario}
 		WORKING_DIRECTORY "${SWF_TEST_BIN}")

@@ -22,7 +22,7 @@ extern "C" {
 #endif
 
 #define SWF_ABI_MAJOR 1
-#define SWF_ABI_MINOR 1 /* 1: CheckIntegrity */
+#define SWF_ABI_MINOR 2 /* 1: CheckIntegrity; 2: Write */
 
 /* Frozen: name of the export every candidate provides. */
 #define SWF_CANDIDATE_EXPORT "SWF_Candidate_v1"
@@ -58,7 +58,7 @@ typedef uint64_t SWF_Caps;
 #define SWF_CAP_SWITCH_STRUCTURAL (1ull << 4)  /* SWF_EVENT_SWITCH_STRUCTURAL */
 #define SWF_CAP_MOVES (1ull << 5)              /* SWF_EVENT_MOVED */
 #define SWF_CAP_FADE_CALLS (1ull << 6)         /* SWF_HOOK_FADE_* */
-#define SWF_CAP_NODE_CALLS (1ull << 7)         /* SWF_HOOK_CELL_*, collision, controllers, dismember */
+#define SWF_CAP_NODE_CALLS (1ull << 7)         /* SWF_HOOK_CELL_*, collision (and SWF_HOOK_HAVOK_INIT), controllers, dismember */
 #define SWF_CAP_PROPERTY_CALLS (1ull << 8)     /* SWF_HOOK_PROPERTY_*, SWF_HOOK_LIGHTING_*, emittance */
 #define SWF_CAP_GEOMETRY_CALLS (1ull << 9)     /* alpha, weapon blood, land */
 #define SWF_CAP_MATERIAL_CALLS (1ull << 10)    /* controllers' and materials' in-place writes */
@@ -83,6 +83,7 @@ typedef uint64_t SWF_Caps;
 #define SWF_EVENT_CHILD_DETACHING 6   /* SWF_ChildEvent, before an NiNode child edit detaches `child` */
 #define SWF_EVENT_SWITCH_STRUCTURAL 7 /* SWF_NodeEvent, after one of NiSwitchNode's own child edits */
 #define SWF_EVENT_MOVED 8             /* SWF_MovedEvent, after an engine writer moved a reference or node */
+#define SWF_EVENT_SCENE_WRITE 9       /* SWF_SceneWriteEvent, PRE and POST around a plugin's SWF_Api::Write */
 
 /* Filter ids. A filter runs before the write and may veto it. */
 #define SWF_FILTER_SHOW 1 /* SWF_ShowFilterEvent: an engine LOD store about to clear kHidden */
@@ -117,6 +118,27 @@ typedef struct SWF_WrittenEvent
 	void* object; /* engine object written (NiAVObject*, BSShaderProperty*, material...) */
 	SWF_Fields fields;
 } SWF_WrittenEvent;
+
+/* Scene writes (SWF_Api::Write, abiMinor >= 2): fields a participating plugin writes through SWF instead of
+ * storing them itself. SWF makes the store on the calling thread between SWF_EVENT_SCENE_WRITE's PRE and POST,
+ * so every subscriber sees the plugin's write as it sees the engine's own writers'. A property is reference
+ * counted as the engine's NiPointer counts it: the new one gains a reference before the store, and the old one
+ * loses the field's after POST, so subscribers may read either during both phases. A write that changes
+ * nothing stores nothing and fires nothing. */
+#define SWF_WRITE_HIDDEN 1          /* NiAVObject*: flags bit 0 (kHidden); value 0 or 1 */
+#define SWF_WRITE_SHADER_PROPERTY 2 /* BSGeometry*: its shader property; value a BSShaderProperty* (0 clears) */
+#define SWF_WRITE_ALPHA_PROPERTY 3  /* BSGeometry*: its alpha property; value an NiAlphaProperty* (0 clears) */
+#define SWF_WRITE_ALPHA_FLAGS 4     /* NiAlphaProperty*: its flags (blend, test and their modes); value the 16 bits */
+
+typedef struct SWF_SceneWriteEvent
+{
+	SWF_EventHeader header;
+	uint32_t kind; /* SWF_WRITE_* */
+	uint32_t reserved;
+	void* object;
+	uint64_t before; /* the field's value before the store: a pointer, or the bit */
+	uint64_t after;  /* the value written */
+} SWF_SceneWriteEvent;
 
 /* Engine stores. `site` indexes the provider's table for that event (stable within one
  * implVersion; SiteCount gives the count); `siteOffset` is the store's offset from the
@@ -275,7 +297,15 @@ typedef struct SWF_CallEvent
 #define SWF_HOOK_EFFECT_FLOAT_CONTROLLER_UPDATE 51 /* BSEffectShaderPropertyFloatController slot 0x27 (controller, data) */
 #define SWF_HOOK_EFFECT_COLOR_CONTROLLER_UPDATE 52 /* BSEffectShaderPropertyColorController slot 0x27 (controller, data) */
 #define SWF_HOOK_EFFECT_MATERIAL_COPY_MEMBERS 53   /* BSEffectShaderMaterial slot 0x02 (material, source) */
-#define SWF_HOOK_COUNT 54
+/* SWF_CAP_NODE_CALLS */
+#define SWF_HOOK_HAVOK_INIT 54                /* 0xe86ad0 bhkWorld::InitHavok (world, NiAVObject* from, NiAVObject* to): moves a
+                                               * collision object from `from` to `to` (SetCollisionObject on `to`, `from`'s
+                                               * +0x40 cleared inline) */
+#define SWF_HOOK_REFERENCE_DISABLE 55         /* 0xa3db90 (TESObjectREFR*, bool fadeOut, bool, handle*, uint32) -> bool: Papyrus
+                                               * Disable's; with a fade, the 3D's LOD type set to 9 (+0x153) inline */
+#define SWF_HOOK_ENABLE_COMMAND 56            /* 0x34c9f0, the script command Enable (8 arguments, the reference third) -> bool:
+                                               * a LOD type of 9 reset to the model's, inline */
+#define SWF_HOOK_COUNT 57
 
 /* Event callback. `scratch` points to SWF_SCRATCH_WORDS words private to this subscription
  * and this engine call, zeroed before the first dispatch. For a PRE|POST subscription they
@@ -351,6 +381,10 @@ typedef struct SWF_Api
 	 * nothing: a later hook that calls on still reaches SWF's. `fn` may be null. Returns the count. Hosts
 	 * call it once the game's data has loaded (SKSE kDataLoaded), when every plugin has installed. */
 	uint32_t (*CheckIntegrity)(SWF_IntegrityFn fn, void* user);
+
+	/* abiMinor >= 2. Writes `value` into `object`'s field `kind` (SWF_WRITE_*) and fires SWF_EVENT_SCENE_WRITE
+	 * around the store. On any thread the engine allows that write on; SWF adds no locking of its own. */
+	SWF_Result (*Write)(uint32_t kind, void* object, uint64_t value);
 } SWF_Api;
 
 typedef struct SWF_CandidateInfo

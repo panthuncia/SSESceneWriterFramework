@@ -261,6 +261,91 @@ namespace
 	}
 }
 
+namespace
+{
+	// A stand-in engine object: a vtable whose DeleteThis (slot 1) counts deletions, the count at +0x8, the
+	// flags at +0xF4, the alpha and shader properties at +0x120 and +0x128 (AE's layout).
+	int deletions = 0;
+	void Destructor(void*) {}
+	void DeleteThis(void*) { ++deletions; }
+	using Slot = void (*)(void*);
+	constexpr Slot kVtable[] = { &Destructor, &DeleteThis };
+	struct alignas(16) Fake
+	{
+		const Slot* vtable = kVtable;
+		uint32_t refCount = 0;
+		uint8_t bytes[0x130 - 12]{};
+		uint32_t& Flags() { return *reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(this) + 0xF4); }
+		uint64_t& Shader() { return *reinterpret_cast<uint64_t*>(reinterpret_cast<uint8_t*>(this) + 0x128); }
+	};
+
+	struct WriteSeen
+	{
+		std::vector<uint32_t> phases;
+		std::vector<uint64_t> fieldAtPre, fieldAtPost;
+		Fake* object = nullptr;
+		uint64_t before = 0, after = 0;
+	} written;
+
+	void RecordWrite(const SWF_EventHeader* event, uintptr_t*, void*)
+	{
+		const auto& write = *reinterpret_cast<const SWF_SceneWriteEvent*>(event);
+		auto* object = static_cast<Fake*>(write.object);
+		written.phases.push_back(event->phase);
+		const uint64_t field = write.kind == SWF_WRITE_HIDDEN ? (object->Flags() & 1u) : object->Shader();
+		(event->phase == SWF_PHASE_PRE ? written.fieldAtPre : written.fieldAtPost).push_back(field);
+		written.object = object;
+		written.before = write.before;
+		written.after = write.after;
+	}
+
+	int SceneWrite()
+	{
+		Abc hosts;
+		const SWF_Api* api = hosts.a.PostLoad();
+		CHECK(api != nullptr && api->abiMinor >= 2 && api->size >= sizeof(SWF_Api));
+		SWF_Subscription subscription = 0;
+		CHECK(api->Subscribe(SWF_EVENT_SCENE_WRITE, SWF_PHASE_PRE | SWF_PHASE_POST, 0, &RecordWrite, nullptr, &subscription) == SWF_OK);
+
+		Fake geometry, first, second;
+		geometry.Flags() = 0x40;
+		CHECK(api->Write(SWF_WRITE_HIDDEN, &geometry, 1) == SWF_OK);
+		CHECK(geometry.Flags() == 0x41);
+		CHECK((written.phases == std::vector<uint32_t>{ SWF_PHASE_PRE, SWF_PHASE_POST }));
+		CHECK((written.fieldAtPre == std::vector<uint64_t>{ 0 }) && (written.fieldAtPost == std::vector<uint64_t>{ 1 }));
+		CHECK(written.object == &geometry && written.before == 0 && written.after == 1);
+
+		written = {};
+		CHECK(api->Write(SWF_WRITE_HIDDEN, &geometry, 1) == SWF_OK);  // no change: nothing fired
+		CHECK(written.phases.empty());
+		CHECK(api->Write(SWF_WRITE_HIDDEN, &geometry, 2) == SWF_E_INVALID);
+
+		// A property swap: the new one referenced before PRE, the old one released after POST.
+		const auto firstAddress = reinterpret_cast<uint64_t>(&first), secondAddress = reinterpret_cast<uint64_t>(&second);
+		CHECK(api->Write(SWF_WRITE_SHADER_PROPERTY, &geometry, firstAddress) == SWF_OK);
+		CHECK(geometry.Shader() == firstAddress && first.refCount == 1);
+		written = {};
+		CHECK(api->Write(SWF_WRITE_SHADER_PROPERTY, &geometry, secondAddress) == SWF_OK);
+		CHECK((written.fieldAtPre == std::vector<uint64_t>{ firstAddress }) && (written.fieldAtPost == std::vector<uint64_t>{ secondAddress }));
+		CHECK(written.before == firstAddress && written.after == secondAddress);
+		CHECK(second.refCount == 1 && first.refCount == 0 && deletions == 1);
+		CHECK(api->Write(SWF_WRITE_SHADER_PROPERTY, &geometry, 0) == SWF_OK);
+		CHECK(geometry.Shader() == 0 && second.refCount == 0 && deletions == 2);
+
+		// An alpha property's 16-bit flags at +0x30.
+		auto& alphaFlags = *reinterpret_cast<uint16_t*>(reinterpret_cast<uint8_t*>(&first) + 0x30);
+		alphaFlags = 0x00EC;
+		written = {};
+		CHECK(api->Write(SWF_WRITE_ALPHA_FLAGS, &first, 0x00ED) == SWF_OK);
+		CHECK(alphaFlags == 0x00ED && written.before == 0x00EC && written.after == 0x00ED && written.phases.size() == 2);
+		CHECK(api->Write(SWF_WRITE_ALPHA_FLAGS, &first, 0x10000) == SWF_E_INVALID);
+
+		CHECK(api->Write(SWF_WRITE_SHADER_PROPERTY, nullptr, 0) == SWF_E_INVALID);
+		CHECK(api->Write(99, &geometry, 0) == SWF_E_UNSUPPORTED);
+		return 0;
+	}
+}
+
 int main(int argc, char** argv)
 {
 	CHECK(argc == 2);
@@ -285,6 +370,7 @@ int main(int argc, char** argv)
 		{ "late_candidate", &LateCandidate },
 		{ "client_only", &ClientOnly },
 		{ "dispatch", &Dispatch },
+		{ "scene_write", &SceneWrite },
 	};
 	for (const Scenario& scenario : kScenarios)
 		if (std::strcmp(scenario.name, argv[1]) == 0)

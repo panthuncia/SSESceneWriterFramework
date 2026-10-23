@@ -14,6 +14,17 @@ namespace swf::inline SWF_NAMESPACE
 		std::uint32_t count;
 	};
 
+	/// The fields SWF_Api::Write stores, for one runtime.
+	struct SceneLayout
+	{
+		std::uint32_t flags;           // NiAVObject::flags (kHidden is bit 0)
+		std::uint32_t alphaProperty;   // BSGeometry's NiPointer<NiAlphaProperty>
+		std::uint32_t shaderProperty;  // BSGeometry's NiPointer<BSShaderProperty>
+		std::uint32_t alphaFlags;      // NiAlphaProperty's 16-bit flags
+		std::uint32_t refCount;        // NiRefObject's count
+		std::uint32_t deleteThisSlot;  // NiRefObject's DeleteThis, run when the count reaches 0
+	};
+
 	/// The engine functions and vtables the detour families hook, for one runtime.
 	struct HookTargets
 	{
@@ -46,6 +57,8 @@ namespace swf::inline SWF_NAMESPACE
 		hooking::Vtable effectFloatController;            // slot 0x27
 		hooking::Vtable effectColorController;            // slot 0x27
 		hooking::Vtable effectMaterial;                   // slot 0x02
+
+		SceneLayout scene;
 	};
 
 	namespace tables::ae_1_6_1170

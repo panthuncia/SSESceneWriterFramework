@@ -29,6 +29,7 @@ set(SWF_CORE_SOURCES
 	"${SWF_ROOT}/src/core/Dispatch.cpp"
 	"${SWF_ROOT}/src/core/Log.cpp"
 	"${SWF_ROOT}/src/core/Provider.cpp"
+	"${SWF_ROOT}/src/core/Writes.cpp"
 	"${SWF_ROOT}/src/families/Calls.cpp"
 	"${SWF_ROOT}/src/families/Families.cpp"
 	"${SWF_ROOT}/src/families/Moves.cpp"

@@ -25,6 +25,7 @@ First release. Supports AE 1.6.1170 only.
 - Events, PRE and POST, with scratch words for each call.
 - Filters: `SWF_FILTER_SHOW`, and `SWF_FILTER_CALL` for vetoable calls.
 - `NotifyWritten` for a plugin's own writes.
+- `Write` for a plugin's scene writes: SWF makes the store between `SWF_EVENT_SCENE_WRITE`'s PRE and POST (the hidden bit, a geometry's shader and alpha properties, an alpha property's flags), so subscribers see them as they see the engine's writers.
 - `SiteCount`, `ResolveSite` and `CheckIntegrity`.
 
 ### ABI notes
@@ -38,4 +39,5 @@ The ABI stays pre-release until 1.0.0, so struct layouts and ids may still chang
 Within 0.x:
 
 - `SWF_ABI_MINOR` 1 added `CheckIntegrity`.
+- `SWF_ABI_MINOR` 2 added `Write` and `SWF_EVENT_SCENE_WRITE`.
 - A client asks for the minor it was built with, so it connects only to a provider at least that new.

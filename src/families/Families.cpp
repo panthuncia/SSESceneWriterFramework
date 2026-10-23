@@ -74,6 +74,7 @@ namespace swf::inline SWF_NAMESPACE
 		}
 		switch (id) {
 		case SWF_EVENT_WRITTEN:
+		case SWF_EVENT_SCENE_WRITE:
 			return 0;
 		case SWF_EVENT_HIDDEN:
 			return SWF_CAP_HIDDEN;

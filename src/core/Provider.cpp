@@ -2,6 +2,7 @@
 
 #include "core/Dispatch.h"
 #include "core/Log.h"
+#include "core/Writes.h"
 #include "families/Families.h"
 #include "families/Stores.h"
 #include "hooking/Integrity.h"
@@ -144,6 +145,11 @@ namespace swf::inline SWF_NAMESPACE::provider
 			return Ready() ? hooking::CheckIntegrity(fn, user) : 0;
 		}
 
+		SWF_Result Write(uint32_t kind, void* object, uint64_t value)
+		{
+			return Ready() ? writes::Write(kind, object, value) : SWF_E_NOT_READY;
+		}
+
 		constexpr SWF_Api kApi{
 			sizeof(SWF_Api),
 			SWF_ABI_MINOR,
@@ -157,6 +163,7 @@ namespace swf::inline SWF_NAMESPACE::provider
 			&SiteCount,
 			&ResolveSite,
 			&CheckIntegrity,
+			&Write,
 		};
 
 		bool OtherCandidateActive()

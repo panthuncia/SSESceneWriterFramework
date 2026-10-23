@@ -30,7 +30,8 @@ FROZEN(SWF_Api, NotifyWritten, 56);
 FROZEN(SWF_Api, SiteCount, 64);
 FROZEN(SWF_Api, ResolveSite, 72);
 FROZEN(SWF_Api, CheckIntegrity, 80);
-static_assert(sizeof(SWF_Api) >= 88);
+FROZEN(SWF_Api, Write, 88);
+static_assert(sizeof(SWF_Api) >= 96);
 
 FROZEN(SWF_IntegrityEntry, size, 0);
 FROZEN(SWF_IntegrityEntry, kind, 4);
@@ -49,6 +50,11 @@ static_assert(sizeof(SWF_EventHeader) == 24);
 
 FROZEN(SWF_WrittenEvent, object, 24);
 FROZEN(SWF_WrittenEvent, fields, 32);
+FROZEN(SWF_SceneWriteEvent, kind, 24);
+FROZEN(SWF_SceneWriteEvent, object, 32);
+FROZEN(SWF_SceneWriteEvent, before, 40);
+FROZEN(SWF_SceneWriteEvent, after, 48);
+static_assert(sizeof(SWF_SceneWriteEvent) == 56);
 
 FROZEN(SWF_HiddenEvent, object, 24);
 FROZEN(SWF_HiddenEvent, site, 32);
@@ -93,7 +99,8 @@ FROZEN(SWF_CallEvent, result, 32 + 8 * SWF_CALL_MAX_ARGS);
 
 static_assert(SWF_ABI_MAJOR == 1);
 static_assert(SWF_EVENT_CHILD_ATTACHED == 5 && SWF_EVENT_CHILD_DETACHING == 6 && SWF_EVENT_SWITCH_STRUCTURAL == 7 && SWF_EVENT_MOVED == 8);
-static_assert(SWF_EVENT_CALL_BASE == 64 && SWF_HOOK_FADE_ON_VISIBLE == 1 && SWF_HOOK_MATERIAL_RECEIVE_VALUES == 35 && SWF_HOOK_EFFECT_MATERIAL_COPY_MEMBERS == 53 && SWF_HOOK_COUNT == 54);
+static_assert(SWF_EVENT_SCENE_WRITE == 9 && SWF_WRITE_HIDDEN == 1 && SWF_WRITE_SHADER_PROPERTY == 2 && SWF_WRITE_ALPHA_PROPERTY == 3 && SWF_WRITE_ALPHA_FLAGS == 4);
+static_assert(SWF_EVENT_CALL_BASE == 64 && SWF_HOOK_FADE_ON_VISIBLE == 1 && SWF_HOOK_MATERIAL_RECEIVE_VALUES == 35 && SWF_HOOK_EFFECT_MATERIAL_COPY_MEMBERS == 53 && SWF_HOOK_HAVOK_INIT == 54 && SWF_HOOK_REFERENCE_DISABLE == 55 && SWF_HOOK_ENABLE_COMMAND == 56 && SWF_HOOK_COUNT == 57);
 static_assert(SWF_FILTER_CALL_BASE == 64 && SWF_FILTER_CALL(SWF_HOOK_TREE_ANIM_REMOVE) == 113);
 static_assert(SWF_SCRATCH_WORDS == 8 && SWF_CALL_MAX_ARGS == 8);
 static_assert(SWF_EVENT_WRITTEN == 1 && SWF_EVENT_HIDDEN == 2 && SWF_EVENT_SWITCH_INDEX == 3 && SWF_EVENT_FADE_RESET == 4);

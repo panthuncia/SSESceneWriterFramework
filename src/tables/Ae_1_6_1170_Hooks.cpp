@@ -46,6 +46,9 @@ namespace swf::inline SWF_NAMESPACE::tables::ae_1_6_1170
 			f[SWF_HOOK_TREE_ANIM_ADD] = 0x4376f0;
 			f[SWF_HOOK_TREE_ANIM_REMOVE] = 0x437840;
 			f[SWF_HOOK_TREE_ANIM_CLEAR] = 0x437ae0;
+			f[SWF_HOOK_HAVOK_INIT] = 0xe86ad0;
+			f[SWF_HOOK_REFERENCE_DISABLE] = 0xa3db90;
+			f[SWF_HOOK_ENABLE_COMMAND] = 0x34c9f0;
 			return f;
 		}
 
@@ -109,6 +112,7 @@ namespace swf::inline SWF_NAMESPACE::tables::ae_1_6_1170
 			.effectFloatController = { 0x1ac4428, ".?AVBSEffectShaderPropertyFloatController@@" },
 			.effectColorController = { 0x1ac46c0, ".?AVBSEffectShaderPropertyColorController@@" },
 			.effectMaterial = { 0x1abfa18, ".?AVBSEffectShaderMaterial@@" },
+			.scene = { .flags = 0xF4, .alphaProperty = 0x120, .shaderProperty = 0x128, .alphaFlags = 0x30, .refCount = 0x8, .deleteThisSlot = 1 },
 		};
 	}
 

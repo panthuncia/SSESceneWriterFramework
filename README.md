@@ -83,9 +83,11 @@ nest, and each has its own scratch.
 engine's LOD show stores. `SWF_FILTER_CALL(hook)` skips a vetoable call (marked in `swf.h`), with its events, returning 0 to the
 caller.
 
-**Your own writes.** SWF sees only the engine's writers. If your plugin writes scene state directly, by storing to the object or
-through CommonLib's inline setters, call `NotifyWritten(object, SWF_FIELD_*)`. Every subscriber to `SWF_EVENT_WRITTEN` then hears
-of the write.
+**Your own writes.** SWF sees only the engine's writers. For the fields it can store (the hidden bit, a geometry's shader and
+alpha properties, an alpha property's flags: `SWF_WRITE_*`), write through `Write(kind, object, value)` instead of storing them
+yourself: SWF makes the store between `SWF_EVENT_SCENE_WRITE`'s PRE and POST and counts the properties' references as the engine
+does, so subscribers see your write as they see the engine's. For any other direct write, by storing to the object or through
+CommonLib's inline setters, call `NotifyWritten(object, SWF_FIELD_*)`. Every subscriber to `SWF_EVENT_WRITTEN` then hears of it.
 
 **Integrity.** `CheckIntegrity(fn, user)` reads every patch back. It reports each one that another plugin has rewritten since SWF
 installed it, naming the module the new bytes lead into, and logs it. It repairs nothing. The standalone plugin runs it at
