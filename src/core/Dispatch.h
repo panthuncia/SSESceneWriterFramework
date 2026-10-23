@@ -5,12 +5,12 @@
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include <memory>
 #include <mutex>
 
 namespace swf::inline SWF_NAMESPACE::dispatch
 {
 	inline constexpr uint32_t kMaxIds = 256;
-	inline constexpr uint32_t kMaxSubscribers = 32;
 
 	struct Entry
 	{
@@ -20,14 +20,17 @@ namespace swf::inline SWF_NAMESPACE::dispatch
 		int32_t priority = 0;
 		uint32_t phases = 0;
 		uint64_t serial = 0;
+		uint32_t scratchSlot = 0;  // index among the PRE|POST entries; kNoSlot for single-phase ones
+		static constexpr uint32_t kNoSlot = ~0u;
 	};
 
-	/// Immutable once published; replaced copy-on-write and never freed, so dispatch reads
-	/// it without locks while subscriptions change.
+	/// Immutable once published, sized to its entries; replaced copy-on-write and never freed,
+	/// so dispatch reads it without locks while subscriptions change.
 	struct List
 	{
 		uint32_t count = 0;
-		Entry entries[kMaxSubscribers];
+		uint32_t scratchSlots = 0;  // PRE|POST entries, each owning SWF_SCRATCH_WORDS per call
+		std::unique_ptr<Entry[]> entries;
 	};
 
 	class Table
@@ -46,6 +49,8 @@ namespace swf::inline SWF_NAMESPACE::dispatch
 		const std::atomic<uint32_t>* CountWord(uint32_t id) const { return &counts[id]; }
 
 	private:
+		void Publish(uint32_t id, List* next);
+
 		std::array<std::atomic<const List*>, kMaxIds> lists{};
 		std::array<std::atomic<uint32_t>, kMaxIds> counts{};
 		std::mutex mutex;
@@ -65,12 +70,15 @@ namespace swf::inline SWF_NAMESPACE::dispatch
 	bool Vetoed(uint32_t filterId, SWF_EventHeader& header);
 
 	/// PRE/POST dispatch around one engine call. Holds the subscriber snapshot taken at
-	/// Pre() so every subscriber sees both phases with its own scratch word.
+	/// construction, so every subscriber sees both phases, and the PRE|POST subscribers' scratch,
+	/// taken from this thread's scratch arena and given back on destruction (nested calls stack).
 	class Call
 	{
 	public:
-		explicit Call(uint32_t id) :
-			list(Events().Get(id)) {}
+		explicit Call(uint32_t id);
+		~Call();
+		Call(const Call&) = delete;
+		Call& operator=(const Call&) = delete;
 
 		bool Empty() const { return !list || list->count == 0; }
 
@@ -81,6 +89,8 @@ namespace swf::inline SWF_NAMESPACE::dispatch
 		void Run(SWF_EventHeader& header, uint32_t phase);
 
 		const List* list;
-		uintptr_t scratch[kMaxSubscribers]{};
+		uintptr_t* scratch = nullptr;
+		size_t markBlock = 0;
+		size_t markTop = 0;
 	};
 }

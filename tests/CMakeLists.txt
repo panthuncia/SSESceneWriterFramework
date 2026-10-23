@@ -39,3 +39,9 @@ add_executable(swf_store_tests stores/StoreTests.cpp)
 target_link_libraries(swf_store_tests PRIVATE swf_test_core_a xbyak::xbyak)
 swf_internal_compile(swf_store_tests VERSION 0.1.0.0 DEFINITIONS SWF_TESTING)
 add_test(NAME store_stubs COMMAND swf_store_tests)
+
+# The dispatch without a subscriber limit: many subscribers, nested PRE/POST scratch.
+add_executable(swf_dispatch_tests dispatch/DispatchTests.cpp)
+target_link_libraries(swf_dispatch_tests PRIVATE swf_test_core_a)
+swf_internal_compile(swf_dispatch_tests VERSION 0.1.0.0 DEFINITIONS SWF_TESTING)
+add_test(NAME dispatch COMMAND swf_dispatch_tests)

@@ -77,4 +77,6 @@ The tests cover the frozen ABI layout and the election, with each scenario in it
 - client-only connection;
 - dispatch order.
 
+A dispatch test subscribes hundreds of subscribers to one event and runs nested PRE/POST calls whose scratch spans several arena blocks.
+
 A separate store test runs the stubs themselves. It builds a synthetic image from real table entries, patches it the same way the game would be patched, and executes the patched stores. It checks the stored values, the events, the show veto and site resolution.

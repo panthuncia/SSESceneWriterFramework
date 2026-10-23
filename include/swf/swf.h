@@ -39,7 +39,7 @@ typedef int32_t SWF_Result;
 #define SWF_E_FAILED 4      /* activation or install failed */
 #define SWF_E_DISABLED 5    /* disabled by SceneWriterFramework.ini */
 #define SWF_E_SUPERSEDED 6  /* another candidate is already the provider */
-#define SWF_E_FULL 7        /* subscriber limit reached for this id */
+#define SWF_E_FULL 7        /* reserved: SWF has no subscriber limit */
 
 /* Game runtimes a candidate has address tables for (bit per runtime). */
 #define SWF_RUNTIME_AE_1_6_1170 (1ull << 0)
@@ -137,8 +137,11 @@ typedef struct SWF_ShowFilterEvent
 	uint32_t siteOffset;
 } SWF_ShowFilterEvent;
 
-/* Event callback. `scratch` is one word private to this subscription that survives from
- * the PRE to the POST dispatch of the same engine call; it starts at 0. */
+/* Event callback. `scratch` points to SWF_SCRATCH_WORDS words private to this subscription
+ * and this engine call, zeroed before the first dispatch. For a PRE|POST subscription they
+ * survive from the PRE to the POST dispatch of the same call; otherwise they are fresh on
+ * every dispatch. The pointer is valid until the callback returns. */
+#define SWF_SCRATCH_WORDS 4
 typedef void (*SWF_EventFn)(const SWF_EventHeader* event, uintptr_t* scratch, void* user);
 
 /* Filter callback: return nonzero to veto the write. Filters run in priority order and
