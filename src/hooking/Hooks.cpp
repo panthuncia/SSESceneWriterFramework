@@ -34,6 +34,10 @@ namespace swf::inline SWF_NAMESPACE::hooking
 
 	bool VtableMatches(const Image& image, const Vtable& vtable)
 	{
+		if (!vtable.rtti) {
+			log::Warn("a vtable at +{:#x} has no address for this game version", vtable.offset);
+			return false;
+		}
 		const std::uintptr_t at = image.base + vtable.offset;
 		if (vtable.offset < sizeof(void*) || !InImage(image, at)) {
 			log::Warn("vtable {} at +{:#x} is outside the image", vtable.rtti, vtable.offset);

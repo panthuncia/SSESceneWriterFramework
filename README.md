@@ -89,6 +89,14 @@ yourself: SWF makes the store between `SWF_EVENT_SCENE_WRITE`'s PRE and POST and
 does, so subscribers see your write as they see the engine's. For any other direct write, by storing to the object or through
 CommonLib's inline setters, call `NotifyWritten(object, SWF_FIELD_*)`. Every subscriber to `SWF_EVENT_WRITTEN` then hears of it.
 
+**Hides within a frame.** Some engine code hides a node and shows it again within one frame, around the views it should not
+appear in. `Main::Draw` hides the first-person skeleton for the main camera's cull and the sun's casters, and shows it again
+for the first-person draw. `TESWaterReflections::Update` hides the water shapes and the player's 3D around its reflection faces.
+These stores are in the hidden table like any other and each one fires `SWF_EVENT_HIDDEN`, a hide and a show per frame. SWF does
+not merge or drop the pair. A client that renders views mid-frame needs the bit those views saw, and only the client knows
+which views it draws. A client that reads the live bit at some point in the frame can land between the hide and the show. If it
+compares that bit with what it has tracked from the events, it should leave these nodes out.
+
 **Integrity.** `CheckIntegrity(fn, user)` reads every patch back. It reports each one that another plugin has rewritten since SWF
 installed it, naming the module the new bytes lead into, and logs it. It repairs nothing. The standalone plugin runs it at
 `kDataLoaded`, and an embedding host may run it too.

@@ -2,7 +2,7 @@
 #include "core/Writes.h"
 
 #include "core/Dispatch.h"
-#include "tables/HookTargets.h"
+#include "tables/Tables.h"
 
 #include <Windows.h>
 
@@ -14,7 +14,7 @@ namespace swf::inline SWF_NAMESPACE::writes
 	{
 		const SceneLayout& Layout()
 		{
-			return tables::ae_1_6_1170::Targets().scene;
+			return tables::Active().targets->scene;
 		}
 
 		template <class T>

@@ -39,6 +39,13 @@ namespace
 		void* (*GetEventDispatcher)(uint32_t dispatcherId);
 	};
 
+	struct PluginInfo
+	{
+		uint32_t infoVersion;
+		const char* name;
+		uint32_t version;
+	};
+
 	constexpr uint32_t kInterface_Messaging = 5;
 	constexpr uint32_t kMessage_PostLoad = 0;
 	constexpr uint32_t kMessage_DataLoaded = 8;
@@ -87,6 +94,17 @@ extern "C" __declspec(dllexport) constinit SKSEPluginVersionData SKSEPlugin_Vers
 	{ MakeExeVersion(1, 6, 1170), 0 },
 	0,
 };
+
+// SE 1.5.97's SKSE asks through SKSEPlugin_Query instead of reading SKSEPlugin_Version.
+extern "C" __declspec(dllexport) bool SKSEPlugin_Query(const SKSEInterface* skse, PluginInfo* info)
+{
+	if (!skse || !info || skse->isEditor)
+		return false;
+	info->infoVersion = 1;
+	info->name = SKSEPlugin_Version.name;
+	info->version = SKSEPlugin_Version.pluginVersion;
+	return skse->runtimeVersion == MakeExeVersion(1, 5, 97);
+}
 
 extern "C" __declspec(dllexport) bool SKSEPlugin_Load(const SKSEInterface* skse)
 {

@@ -39,7 +39,10 @@ set(SWF_CORE_SOURCES
 	"${SWF_ROOT}/src/hooking/Integrity.cpp"
 	"${SWF_ROOT}/src/hooking/Memory.cpp"
 	"${SWF_ROOT}/src/tables/Ae_1_6_1170.cpp"
-	"${SWF_ROOT}/src/tables/Ae_1_6_1170_Hooks.cpp")
+	"${SWF_ROOT}/src/tables/Ae_1_6_1170_Hooks.cpp"
+	"${SWF_ROOT}/src/tables/Se_1_5_97.cpp"
+	"${SWF_ROOT}/src/tables/Se_1_5_97_Hooks.cpp"
+	"${SWF_ROOT}/src/tables/Tables.cpp")
 
 # Applies SWF's private include path, version defines and warnings to `target`.
 # VERSION overrides the implementation version (tests build several versions at once).

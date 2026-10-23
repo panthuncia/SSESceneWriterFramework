@@ -58,9 +58,9 @@ namespace swf::inline SWF_NAMESPACE::detours
 
 		std::vector<hooking::Detour> MoveDetours(const hooking::Image& image, const HookTargets& targets)
 		{
-			animationGraphPlace = reinterpret_cast<decltype(animationGraphPlace)>(image.base + targets.animationGraphPlace);
-			reference3DPosition = reinterpret_cast<decltype(reference3DPosition)>(image.base + targets.reference3DPosition);
-			graphAnimation = reinterpret_cast<decltype(graphAnimation)>(image.base + targets.graphAnimation);
+			animationGraphPlace = reinterpret_cast<decltype(animationGraphPlace)>(hooking::At(image, targets.animationGraphPlace));
+			reference3DPosition = reinterpret_cast<decltype(reference3DPosition)>(hooking::At(image, targets.reference3DPosition));
+			graphAnimation = reinterpret_cast<decltype(graphAnimation)>(hooking::At(image, targets.graphAnimation));
 			return {
 				{ reinterpret_cast<void**>(&animationGraphPlace), reinterpret_cast<void*>(&AnimationGraphPlace) },
 				{ reinterpret_cast<void**>(&reference3DPosition), reinterpret_cast<void*>(&Reference3DPosition) },
@@ -78,7 +78,7 @@ namespace swf::inline SWF_NAMESPACE::detours
 			}
 		}
 		for (const std::uint32_t offset : { targets.animationGraphPlace, targets.reference3DPosition, targets.graphAnimation })
-			if (!hooking::InImage(image, image.base + offset))
+			if (!hooking::InImage(image, hooking::At(image, offset)))
 				return false;
 		return true;
 	}

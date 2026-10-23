@@ -296,6 +296,10 @@ namespace swf::inline SWF_NAMESPACE::stores
 		template <class Site>
 		bool Verify(const hooking::Image& image, std::span<const Site> sites, const char* what)
 		{
+			if (sites.empty()) {
+				log::Warn("{}: no sites for this game version", what);
+				return false;
+			}
 			for (const Site& site : sites) {
 				if (!hooking::BytesMatch(image, site.offset, site.bytes.data(), site.length)) {
 					log::Warn("{}: the store at +{:#x} is not the expected instruction", what, site.offset);

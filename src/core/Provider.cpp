@@ -8,6 +8,7 @@
 #include "hooking/Integrity.h"
 #include "hooking/Memory.h"
 #include "swf/swf_client.h"
+#include "tables/Tables.h"
 
 #include <Windows.h>
 
@@ -219,6 +220,11 @@ namespace swf::inline SWF_NAMESPACE::provider
 		}
 #endif
 
+		if (!tables::Select(client::RunningRuntime())) {
+			log::Warn("activation refused: no address tables for this game version");
+			return SWF_E_UNSUPPORTED;
+		}
+
 		// Verify everything before writing anything, so a failed activation leaves the
 		// engine untouched for the next candidate.
 		const auto families = Families();
@@ -254,7 +260,8 @@ namespace swf::inline SWF_NAMESPACE::provider
 		++installCount;
 #endif
 		state.store(SWF_STATE_ACTIVE, std::memory_order_release);
-		log::Info("active as provider (abi {}.{}, {} candidates, caps {})", SWF_ABI_MAJOR, SWF_ABI_MINOR, candidateCount, CapsString(installed));
+		log::Info("active as provider for {} (abi {}.{}, {} candidates, caps {})", tables::Active().name, SWF_ABI_MAJOR, SWF_ABI_MINOR, candidateCount,
+			CapsString(installed));
 		return SWF_OK;
 	}
 

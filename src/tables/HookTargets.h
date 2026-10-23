@@ -65,4 +65,9 @@ namespace swf::inline SWF_NAMESPACE
 	{
 		const HookTargets& Targets();
 	}
+
+	namespace tables::se_1_5_97
+	{
+		const HookTargets& Targets();
+	}
 }

@@ -3,33 +3,32 @@
 #include "families/CallHook.h"
 #include "families/DetourFamilies.h"
 #include "families/Stores.h"
-#include "tables/HookTargets.h"
-#include "tables/StoreSites.h"
+#include "tables/Tables.h"
 
 namespace swf::inline SWF_NAMESPACE
 {
 	namespace
 	{
-		namespace table = tables::ae_1_6_1170;
+		const tables::Runtime& table() { return tables::Active(); }
 
-		bool VerifyHidden() { return stores::VerifyHidden(hooking::GameImage(), table::HiddenStores()); }
-		bool InstallHidden() { return stores::InstallHidden(hooking::GameImage(), table::HiddenStores(), table::ShowSites()); }
-		bool VerifySwitch() { return stores::VerifyValues(hooking::GameImage(), table::SwitchStores()); }
-		bool InstallSwitch() { return stores::InstallSwitchIndex(hooking::GameImage(), table::SwitchStores()); }
-		bool VerifyFadeReset() { return stores::VerifyValues(hooking::GameImage(), table::FadeResetStores()); }
-		bool InstallFadeReset() { return stores::InstallFadeReset(hooking::GameImage(), table::FadeResetStores()); }
+		bool VerifyHidden() { return stores::VerifyHidden(hooking::GameImage(), table().hiddenStores); }
+		bool InstallHidden() { return stores::InstallHidden(hooking::GameImage(), table().hiddenStores, table().showSites); }
+		bool VerifySwitch() { return stores::VerifyValues(hooking::GameImage(), table().switchStores); }
+		bool InstallSwitch() { return stores::InstallSwitchIndex(hooking::GameImage(), table().switchStores); }
+		bool VerifyFadeReset() { return stores::VerifyValues(hooking::GameImage(), table().fadeResetStores); }
+		bool InstallFadeReset() { return stores::InstallFadeReset(hooking::GameImage(), table().fadeResetStores); }
 
-		bool VerifyStructure() { return detours::VerifyStructure(hooking::GameImage(), table::Targets()); }
-		bool InstallStructure() { return detours::InstallStructure(hooking::GameImage(), table::Targets()); }
-		bool VerifySwitchStructural() { return detours::VerifySwitchStructural(hooking::GameImage(), table::Targets()); }
-		bool InstallSwitchStructural() { return detours::InstallSwitchStructural(hooking::GameImage(), table::Targets()); }
-		bool VerifyMoves() { return detours::VerifyMoves(hooking::GameImage(), table::Targets()); }
-		bool InstallMoves() { return detours::InstallMoves(hooking::GameImage(), table::Targets()); }
+		bool VerifyStructure() { return detours::VerifyStructure(hooking::GameImage(), *table().targets); }
+		bool InstallStructure() { return detours::InstallStructure(hooking::GameImage(), *table().targets); }
+		bool VerifySwitchStructural() { return detours::VerifySwitchStructural(hooking::GameImage(), *table().targets); }
+		bool InstallSwitchStructural() { return detours::InstallSwitchStructural(hooking::GameImage(), *table().targets); }
+		bool VerifyMoves() { return detours::VerifyMoves(hooking::GameImage(), *table().targets); }
+		bool InstallMoves() { return detours::InstallMoves(hooking::GameImage(), *table().targets); }
 
 		template <SWF_Caps Family>
-		bool VerifyCalls() { return detours::VerifyCalls(Family, hooking::GameImage(), table::Targets()); }
+		bool VerifyCalls() { return detours::VerifyCalls(Family, hooking::GameImage(), *table().targets); }
 		template <SWF_Caps Family>
-		bool InstallCalls() { return detours::InstallCalls(Family, hooking::GameImage(), table::Targets()); }
+		bool InstallCalls() { return detours::InstallCalls(Family, hooking::GameImage(), *table().targets); }
 
 		// No family is required: a provider with some families missing still serves the rest,
 		// and each client decides from the capability bits whether it can run.

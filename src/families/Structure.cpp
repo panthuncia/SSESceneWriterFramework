@@ -244,7 +244,7 @@ namespace swf::inline SWF_NAMESPACE::detours
 					detours.push_back(EditFor(n + 1, slot, target));
 				}
 			}
-			const std::uintptr_t all = image.base + targets.removeAllChildren;
+			const std::uintptr_t all = hooking::At(image, targets.removeAllChildren);
 			removeAll = reinterpret_cast<decltype(removeAll)>(all);
 			hooked.push_back(all);
 			detours.push_back({ reinterpret_cast<void**>(&removeAll), reinterpret_cast<void*>(&RemoveAllChildren) });

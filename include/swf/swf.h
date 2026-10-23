@@ -43,6 +43,7 @@ typedef int32_t SWF_Result;
 
 /* Game runtimes a candidate has address tables for (bit per runtime). */
 #define SWF_RUNTIME_AE_1_6_1170 (1ull << 0)
+#define SWF_RUNTIME_SE_1_5_97 (1ull << 1)
 
 /* Candidate states reported by SWF_CandidateInfo::GetState. */
 #define SWF_STATE_IDLE 0
@@ -305,7 +306,12 @@ typedef struct SWF_CallEvent
                                                * Disable's; with a fade, the 3D's LOD type set to 9 (+0x153) inline */
 #define SWF_HOOK_ENABLE_COMMAND 56            /* 0x34c9f0, the script command Enable (8 arguments, the reference third) -> bool:
                                                * a LOD type of 9 reset to the model's, inline */
-#define SWF_HOOK_COUNT 57
+/* SWF_CAP_GEOMETRY_CALLS */
+#define SWF_HOOK_FLORA_HARVEST_ALPHAS 57      /* 0x1e95a0 (object, const bool* harvested) -> uint64: the flora's harvested look,
+                                               * recursive over the object's geometries: each alpha's threshold (+0x32) swapped
+                                               * inline between the unharvested and harvested values. From the harvest and the
+                                               * harvestable 3D's setup */
+#define SWF_HOOK_COUNT 58
 
 /* Event callback. `scratch` points to SWF_SCRATCH_WORDS words private to this subscription
  * and this engine call, zeroed before the first dispatch. For a PRE|POST subscription they

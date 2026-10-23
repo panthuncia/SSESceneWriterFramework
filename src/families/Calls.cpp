@@ -49,6 +49,7 @@ namespace swf::inline SWF_NAMESPACE::detours
 
 		using GeometryAttachAlpha = Hook<SWF_HOOK_GEOMETRY_ATTACH_ALPHA, void(void*, void*)>;
 		using AlphasSetThreshold = Hook<SWF_HOOK_ALPHAS_SET_THRESHOLD, std::uint64_t(void*, void*)>;
+		using FloraHarvestAlphas = Hook<SWF_HOOK_FLORA_HARVEST_ALPHAS, std::uint64_t(void*, const bool*)>;
 		using WeaponBloodGeometry = Hook<SWF_HOOK_WEAPON_BLOOD_GEOMETRY, std::uint64_t(void*, void*)>;
 		using LandSetupProperties = Hook<SWF_HOOK_LAND_SETUP_PROPERTIES, std::uint64_t(void*)>;
 		using LandBlendParams = Hook<SWF_HOOK_LAND_BLEND_PARAMS, void(void*)>;
@@ -119,7 +120,7 @@ namespace swf::inline SWF_NAMESPACE::detours
 		template <class H>
 		void PatchAt(Plan& plan, const hooking::Image& image, const HookTargets& targets, std::uint32_t hook)
 		{
-			const std::uintptr_t target = image.base + targets.functions[hook];
+			const std::uintptr_t target = hooking::At(image, targets.functions[hook]);
 			H::original = reinterpret_cast<decltype(H::original)>(target);
 			const CallSites& sites = targets.callSites[hook];
 			for (std::uint32_t i = 0; i < sites.count; ++i) {
@@ -132,7 +133,7 @@ namespace swf::inline SWF_NAMESPACE::detours
 		template <std::uint32_t... V>
 		void DetourDecals(Plan& plan, const hooking::Image& image, const HookTargets& targets, std::integer_sequence<std::uint32_t, V...>)
 		{
-			(DetourAt<DecalArrayEdit<V>>(plan, image.base + targets.decalArrayEdits[V]), ...);
+			(DetourAt<DecalArrayEdit<V>>(plan, hooking::At(image, targets.decalArrayEdits[V])), ...);
 		}
 
 		template <std::uint32_t... V>
@@ -154,44 +155,45 @@ namespace swf::inline SWF_NAMESPACE::detours
 				plan.vtables.push_back(targets.fadeNode);
 				if (readSlots)
 					DetourAt<FadeOnVisible>(plan, hooking::SlotTarget(image, targets.fadeNode, 0x34));
-				DetourAt<FadeUpdate>(plan, image.base + targets.functions[SWF_HOOK_FADE_UPDATE]);
-				DetourAt<FadeLodLevel>(plan, image.base + targets.functions[SWF_HOOK_FADE_LOD_LEVEL]);
-				DetourAt<FadeSetRange>(plan, image.base + targets.functions[SWF_HOOK_FADE_SET_RANGE]);
-				DetourAt<FadeSetLodType>(plan, image.base + targets.functions[SWF_HOOK_FADE_SET_LOD_TYPE]);
-				DetourAt<FadeSnap>(plan, image.base + targets.functions[SWF_HOOK_FADE_SNAP]);
+				DetourAt<FadeUpdate>(plan, hooking::At(image, targets.functions[SWF_HOOK_FADE_UPDATE]));
+				DetourAt<FadeLodLevel>(plan, hooking::At(image, targets.functions[SWF_HOOK_FADE_LOD_LEVEL]));
+				DetourAt<FadeSetRange>(plan, hooking::At(image, targets.functions[SWF_HOOK_FADE_SET_RANGE]));
+				DetourAt<FadeSetLodType>(plan, hooking::At(image, targets.functions[SWF_HOOK_FADE_SET_LOD_TYPE]));
+				DetourAt<FadeSnap>(plan, hooking::At(image, targets.functions[SWF_HOOK_FADE_SNAP]));
 				return true;
 			case SWF_CAP_NODE_CALLS:
-				DetourAt<CellPlaceReference>(plan, image.base + targets.functions[SWF_HOOK_CELL_PLACE_REFERENCE]);
-				DetourAt<CellPlaceReferenceAt>(plan, image.base + targets.functions[SWF_HOOK_CELL_PLACE_REFERENCE_AT]);
-				DetourAt<RigidBodyMotionType>(plan, image.base + targets.functions[SWF_HOOK_RIGID_BODY_MOTION_TYPE]);
-				DetourAt<ReleaseCollisionObject>(plan, image.base + targets.functions[SWF_HOOK_RELEASE_COLLISION_OBJECT]);
-				DetourAt<SetCollisionObject>(plan, image.base + targets.functions[SWF_HOOK_SET_COLLISION_OBJECT]);
-				DetourAt<PrependController>(plan, image.base + targets.functions[SWF_HOOK_PREPEND_CONTROLLER]);
-				DetourAt<RemoveController>(plan, image.base + targets.functions[SWF_HOOK_REMOVE_CONTROLLER]);
-				DetourAt<HavokNodeTransform>(plan, image.base + targets.functions[SWF_HOOK_HAVOK_NODE_TRANSFORM]);
-				DetourAt<DismemberPartition>(plan, image.base + targets.functions[SWF_HOOK_DISMEMBER_PARTITION]);
-				DetourAt<BipedDismemberPartitions>(plan, image.base + targets.functions[SWF_HOOK_BIPED_DISMEMBER_PARTITIONS]);
-				DetourAt<HavokInit>(plan, image.base + targets.functions[SWF_HOOK_HAVOK_INIT]);
-				DetourAt<ReferenceDisable>(plan, image.base + targets.functions[SWF_HOOK_REFERENCE_DISABLE]);
-				DetourAt<EnableCommand>(plan, image.base + targets.functions[SWF_HOOK_ENABLE_COMMAND]);
+				DetourAt<CellPlaceReference>(plan, hooking::At(image, targets.functions[SWF_HOOK_CELL_PLACE_REFERENCE]));
+				DetourAt<CellPlaceReferenceAt>(plan, hooking::At(image, targets.functions[SWF_HOOK_CELL_PLACE_REFERENCE_AT]));
+				DetourAt<RigidBodyMotionType>(plan, hooking::At(image, targets.functions[SWF_HOOK_RIGID_BODY_MOTION_TYPE]));
+				DetourAt<ReleaseCollisionObject>(plan, hooking::At(image, targets.functions[SWF_HOOK_RELEASE_COLLISION_OBJECT]));
+				DetourAt<SetCollisionObject>(plan, hooking::At(image, targets.functions[SWF_HOOK_SET_COLLISION_OBJECT]));
+				DetourAt<PrependController>(plan, hooking::At(image, targets.functions[SWF_HOOK_PREPEND_CONTROLLER]));
+				DetourAt<RemoveController>(plan, hooking::At(image, targets.functions[SWF_HOOK_REMOVE_CONTROLLER]));
+				DetourAt<HavokNodeTransform>(plan, hooking::At(image, targets.functions[SWF_HOOK_HAVOK_NODE_TRANSFORM]));
+				DetourAt<DismemberPartition>(plan, hooking::At(image, targets.functions[SWF_HOOK_DISMEMBER_PARTITION]));
+				DetourAt<BipedDismemberPartitions>(plan, hooking::At(image, targets.functions[SWF_HOOK_BIPED_DISMEMBER_PARTITIONS]));
+				DetourAt<HavokInit>(plan, hooking::At(image, targets.functions[SWF_HOOK_HAVOK_INIT]));
+				DetourAt<ReferenceDisable>(plan, hooking::At(image, targets.functions[SWF_HOOK_REFERENCE_DISABLE]));
+				DetourAt<EnableCommand>(plan, hooking::At(image, targets.functions[SWF_HOOK_ENABLE_COMMAND]));
 				return true;
 			case SWF_CAP_PROPERTY_CALLS:
-				DetourAt<PropertySetFlags>(plan, image.base + targets.functions[SWF_HOOK_PROPERTY_SET_FLAGS]);
-				DetourAt<PropertySetMaterial>(plan, image.base + targets.functions[SWF_HOOK_PROPERTY_SET_MATERIAL]);
-				DetourAt<PropertiesSetFlag>(plan, image.base + targets.functions[SWF_HOOK_PROPERTIES_SET_FLAG]);
-				DetourAt<PropertiesSetFadeNode>(plan, image.base + targets.functions[SWF_HOOK_PROPERTIES_SET_FADE_NODE]);
-				DetourAt<PropertiesProjectedUV>(plan, image.base + targets.functions[SWF_HOOK_PROPERTIES_PROJECTED_UV]);
-				DetourAt<SetExternalEmittance>(plan, image.base + targets.functions[SWF_HOOK_SET_EXTERNAL_EMITTANCE]);
-				DetourAt<SkySetColor>(plan, image.base + targets.functions[SWF_HOOK_SKY_SET_COLOR]);
+				DetourAt<PropertySetFlags>(plan, hooking::At(image, targets.functions[SWF_HOOK_PROPERTY_SET_FLAGS]));
+				DetourAt<PropertySetMaterial>(plan, hooking::At(image, targets.functions[SWF_HOOK_PROPERTY_SET_MATERIAL]));
+				DetourAt<PropertiesSetFlag>(plan, hooking::At(image, targets.functions[SWF_HOOK_PROPERTIES_SET_FLAG]));
+				DetourAt<PropertiesSetFadeNode>(plan, hooking::At(image, targets.functions[SWF_HOOK_PROPERTIES_SET_FADE_NODE]));
+				DetourAt<PropertiesProjectedUV>(plan, hooking::At(image, targets.functions[SWF_HOOK_PROPERTIES_PROJECTED_UV]));
+				DetourAt<SetExternalEmittance>(plan, hooking::At(image, targets.functions[SWF_HOOK_SET_EXTERNAL_EMITTANCE]));
+				DetourAt<SkySetColor>(plan, hooking::At(image, targets.functions[SWF_HOOK_SKY_SET_COLOR]));
 				SwapSlot<LightingSetMaterialAlpha>(plan, image, targets.lightingProperty, 0x31);
 				SwapSlot<LightingGetRenderPasses>(plan, image, targets.lightingProperty, 0x2A);
 				return true;
 			case SWF_CAP_GEOMETRY_CALLS:
-				DetourAt<GeometryAttachAlpha>(plan, image.base + targets.functions[SWF_HOOK_GEOMETRY_ATTACH_ALPHA]);
-				DetourAt<AlphasSetThreshold>(plan, image.base + targets.functions[SWF_HOOK_ALPHAS_SET_THRESHOLD]);
-				DetourAt<WeaponBloodGeometry>(plan, image.base + targets.functions[SWF_HOOK_WEAPON_BLOOD_GEOMETRY]);
-				DetourAt<LandSetupProperties>(plan, image.base + targets.functions[SWF_HOOK_LAND_SETUP_PROPERTIES]);
-				DetourAt<LandBlendParams>(plan, image.base + targets.functions[SWF_HOOK_LAND_BLEND_PARAMS]);
+				DetourAt<GeometryAttachAlpha>(plan, hooking::At(image, targets.functions[SWF_HOOK_GEOMETRY_ATTACH_ALPHA]));
+				DetourAt<AlphasSetThreshold>(plan, hooking::At(image, targets.functions[SWF_HOOK_ALPHAS_SET_THRESHOLD]));
+				DetourAt<FloraHarvestAlphas>(plan, hooking::At(image, targets.functions[SWF_HOOK_FLORA_HARVEST_ALPHAS]));
+				DetourAt<WeaponBloodGeometry>(plan, hooking::At(image, targets.functions[SWF_HOOK_WEAPON_BLOOD_GEOMETRY]));
+				DetourAt<LandSetupProperties>(plan, hooking::At(image, targets.functions[SWF_HOOK_LAND_SETUP_PROPERTIES]));
+				DetourAt<LandBlendParams>(plan, hooking::At(image, targets.functions[SWF_HOOK_LAND_BLEND_PARAMS]));
 				return true;
 			case SWF_CAP_MATERIAL_CALLS:
 				SwapSlot<FloatControllerUpdate>(plan, image, targets.floatController, 0x27);
@@ -202,9 +204,9 @@ namespace swf::inline SWF_NAMESPACE::detours
 				SwapSlot<ActorSetAlpha<0>>(plan, image, targets.actors[0], 0xE1);
 				SwapSlot<ActorSetAlpha<1>>(plan, image, targets.actors[1], 0xE1);
 				SwapSlot<ActorSetAlpha<2>>(plan, image, targets.actors[2], 0xE1);
-				DetourAt<ActorUpdate3DPosition>(plan, image.base + targets.functions[SWF_HOOK_ACTOR_UPDATE_3D_POSITION]);
-				DetourAt<ActorSkyCellSkin>(plan, image.base + targets.functions[SWF_HOOK_ACTOR_SKY_CELL_SKIN]);
-				DetourAt<ActorRagdollJob>(plan, image.base + targets.functions[SWF_HOOK_ACTOR_RAGDOLL_JOB]);
+				DetourAt<ActorUpdate3DPosition>(plan, hooking::At(image, targets.functions[SWF_HOOK_ACTOR_UPDATE_3D_POSITION]));
+				DetourAt<ActorSkyCellSkin>(plan, hooking::At(image, targets.functions[SWF_HOOK_ACTOR_SKY_CELL_SKIN]));
+				DetourAt<ActorRagdollJob>(plan, hooking::At(image, targets.functions[SWF_HOOK_ACTOR_RAGDOLL_JOB]));
 				return true;
 			case SWF_CAP_DECAL_CALLS:
 				DetourDecals(plan, image, targets, std::make_integer_sequence<std::uint32_t, 5>{});
@@ -220,9 +222,9 @@ namespace swf::inline SWF_NAMESPACE::detours
 				SwapSlot<InstanceRemoveGroup>(plan, image, targets.instanceShape, 0x3D);
 				return true;
 			case SWF_CAP_TREE_ANIM_CALLS:
-				DetourAt<TreeAnimAdd>(plan, image.base + targets.functions[SWF_HOOK_TREE_ANIM_ADD]);
-				DetourAt<TreeAnimRemove>(plan, image.base + targets.functions[SWF_HOOK_TREE_ANIM_REMOVE]);
-				DetourAt<TreeAnimClear>(plan, image.base + targets.functions[SWF_HOOK_TREE_ANIM_CLEAR]);
+				DetourAt<TreeAnimAdd>(plan, hooking::At(image, targets.functions[SWF_HOOK_TREE_ANIM_ADD]));
+				DetourAt<TreeAnimRemove>(plan, hooking::At(image, targets.functions[SWF_HOOK_TREE_ANIM_REMOVE]));
+				DetourAt<TreeAnimClear>(plan, hooking::At(image, targets.functions[SWF_HOOK_TREE_ANIM_CLEAR]));
 				return true;
 			case SWF_CAP_EFFECT_CALLS:
 				SwapSlot<EffectFloatControllerUpdate>(plan, image, targets.effectFloatController, 0x27);
@@ -319,7 +321,7 @@ namespace swf::inline SWF_NAMESPACE::detours
 			return SWF_CAP_NODE_CALLS;
 		if (hook >= SWF_HOOK_PROPERTY_SET_FLAGS && hook <= SWF_HOOK_SKY_SET_COLOR)
 			return SWF_CAP_PROPERTY_CALLS;
-		if (hook >= SWF_HOOK_GEOMETRY_ATTACH_ALPHA && hook <= SWF_HOOK_LAND_BLEND_PARAMS)
+		if ((hook >= SWF_HOOK_GEOMETRY_ATTACH_ALPHA && hook <= SWF_HOOK_LAND_BLEND_PARAMS) || hook == SWF_HOOK_FLORA_HARVEST_ALPHAS)
 			return SWF_CAP_GEOMETRY_CALLS;
 		if (hook >= SWF_HOOK_FLOAT_CONTROLLER_UPDATE && hook <= SWF_HOOK_MATERIAL_RECEIVE_VALUES)
 			return SWF_CAP_MATERIAL_CALLS;

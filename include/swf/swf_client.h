@@ -20,6 +20,7 @@
 #include <Psapi.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -114,16 +115,9 @@ namespace swf::client
 		}
 	}
 
-	/// Runtime bit of the running game executable, or 0 if SWF has no table for it.
-	inline uint64_t RunningRuntime()
+	/// Runtime bit of the game executable at `path`, or 0 if SWF has no table for it.
+	inline uint64_t RuntimeOf(const wchar_t* path)
 	{
-		std::string overrideText;
-		if (detail::EnvValue("SWF_RUNTIME_OVERRIDE", overrideText))
-			return std::strtoull(overrideText.c_str(), nullptr, 0);
-
-		wchar_t path[MAX_PATH];
-		if (!GetModuleFileNameW(nullptr, path, MAX_PATH))
-			return 0;
 		DWORD handle = 0;
 		const DWORD size = GetFileVersionInfoSizeW(path, &handle);
 		if (!size)
@@ -135,11 +129,42 @@ namespace swf::client
 			!VerQueryValueW(data.data(), L"\\", reinterpret_cast<void**>(&info), &length) || !info)
 			return 0;
 
-		const uint32_t major = HIWORD(info->dwFileVersionMS), minor = LOWORD(info->dwFileVersionMS);
-		const uint32_t build = HIWORD(info->dwFileVersionLS);
+		uint32_t major = HIWORD(info->dwFileVersionMS), minor = LOWORD(info->dwFileVersionMS);
+		uint32_t build = HIWORD(info->dwFileVersionLS);
+		// SE 1.5.97's fixed version is 1.0.0.0: its version is only in the FileVersion string (as CommonLib reads it).
+		if (major == 1 && minor == 0 && build == 0) {
+			struct Translation
+			{
+				WORD language;
+				WORD codePage;
+			}* translation = nullptr;
+			wchar_t* text = nullptr;
+			if (VerQueryValueW(data.data(), L"\\VarFileInfo\\Translation", reinterpret_cast<void**>(&translation), &length) && translation &&
+				length >= sizeof(Translation)) {
+				wchar_t key[64];
+				swprintf_s(key, L"\\StringFileInfo\\%04x%04x\\FileVersion", translation->language, translation->codePage);
+				if (VerQueryValueW(data.data(), key, reinterpret_cast<void**>(&text), &length) && text)
+					swscanf_s(text, L"%u.%u.%u", &major, &minor, &build);
+			}
+		}
 		if (major == 1 && minor == 6 && build == 1170)
 			return SWF_RUNTIME_AE_1_6_1170;
+		if (major == 1 && minor == 5 && build == 97)
+			return SWF_RUNTIME_SE_1_5_97;
 		return 0;
+	}
+
+	/// Runtime bit of the running game executable, or 0 if SWF has no table for it.
+	inline uint64_t RunningRuntime()
+	{
+		std::string overrideText;
+		if (detail::EnvValue("SWF_RUNTIME_OVERRIDE", overrideText))
+			return std::strtoull(overrideText.c_str(), nullptr, 0);
+
+		wchar_t path[MAX_PATH];
+		if (!GetModuleFileNameW(nullptr, path, MAX_PATH))
+			return 0;
+		return RuntimeOf(path);
 	}
 
 	/// Reads [Election] from Data/SKSE/Plugins/SceneWriterFramework.ini next to the game.

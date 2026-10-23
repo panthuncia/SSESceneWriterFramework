@@ -49,6 +49,7 @@ namespace swf::inline SWF_NAMESPACE::tables::ae_1_6_1170
 			f[SWF_HOOK_HAVOK_INIT] = 0xe86ad0;
 			f[SWF_HOOK_REFERENCE_DISABLE] = 0xa3db90;
 			f[SWF_HOOK_ENABLE_COMMAND] = 0x34c9f0;
+			f[SWF_HOOK_FLORA_HARVEST_ALPHAS] = 0x1e95a0;
 			return f;
 		}
 

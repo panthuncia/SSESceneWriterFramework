@@ -18,6 +18,13 @@ namespace swf::inline SWF_NAMESPACE::hooking
 
 	Image GameImage();
 
+	/// The address of `offset` in `image`. A table holds 0 for an address it does not have for its
+	/// runtime: that gives 0, which no image contains, so the family using it does not verify.
+	inline std::uintptr_t At(const Image& image, std::uint32_t offset)
+	{
+		return offset ? image.base + offset : 0;
+	}
+
 	/// True if `length` bytes at `offset` lie inside the image and equal `bytes`.
 	bool BytesMatch(const Image& image, std::uint32_t offset, const std::uint8_t* bytes, std::size_t length);
 

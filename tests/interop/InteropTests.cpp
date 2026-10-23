@@ -39,6 +39,7 @@ namespace
 	__declspec(noinline) void EngineLodLevel(void*, float level) { trace.push_back("engine lodLevel " + std::to_string(static_cast<int>(level))); }
 	__declspec(noinline) void EngineSetRange(void*, float, float farDistance) { trace.push_back("engine setRange " + std::to_string(static_cast<int>(farDistance))); }
 	__declspec(noinline) void EngineSetLodType(void*, std::uint8_t type) { trace.push_back("engine lodType " + std::to_string(type)); }
+	__declspec(noinline) std::uint64_t EngineSnap(void*, void*) { trace.push_back("engine snap"); return 0; }
 
 	template <int V>
 	__declspec(noinline) void EngineProperty() { trace.push_back("engine property " + std::to_string(V)); }
@@ -221,6 +222,7 @@ int main()
 	targets.functions[SWF_HOOK_FADE_LOD_LEVEL] = Rva(reinterpret_cast<const void*>(&EngineLodLevel));
 	targets.functions[SWF_HOOK_FADE_SET_RANGE] = Rva(reinterpret_cast<const void*>(&EngineSetRange));
 	targets.functions[SWF_HOOK_FADE_SET_LOD_TYPE] = Rva(reinterpret_cast<const void*>(&EngineSetLodType));
+	targets.functions[SWF_HOOK_FADE_SNAP] = Rva(reinterpret_cast<const void*>(&EngineSnap));
 	targets.functions[SWF_HOOK_PROPERTY_SET_FLAGS] = Rva(reinterpret_cast<const void*>(&EngineProperty<0>));
 	targets.functions[SWF_HOOK_PROPERTY_SET_MATERIAL] = Rva(reinterpret_cast<const void*>(&EngineProperty<1>));
 	targets.functions[SWF_HOOK_PROPERTIES_SET_FLAG] = Rva(reinterpret_cast<const void*>(&EngineProperty<2>));
@@ -281,17 +283,17 @@ int main()
 		auto* region = static_cast<std::uint8_t*>(VirtualAlloc(nullptr, 0x1000, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE));
 		CHECK(region);
 		const std::uint8_t writer[] = { 0xB0, 0x01, 0x90, 0x90, 0x90, 0x90, 0x90, 0xC3 };  // mov al, 1; nop x5; ret
-		for (int i = 0; i < 3; ++i)
-			std::memcpy(region + 0x100 * i, writer, sizeof(writer));
+		for (int i = 0; i < 3; ++i)  // from 0x100: offset 0 is a table's "no address"
+			std::memcpy(region + 0x100 * (i + 1), writer, sizeof(writer));
 		// sub rsp, 0x28; mov rax, [rcx]; call [rax + 0x168]; add rsp, 0x28; ret
 		const std::uint8_t pass[] = { 0x48, 0x83, 0xEC, 0x28, 0x48, 0x8B, 0x01, 0xFF, 0x90, 0x68, 0x01, 0x00, 0x00, 0x48, 0x83, 0xC4, 0x28, 0xC3 };
 		std::memcpy(region + 0x400, pass, sizeof(pass));
 		std::memcpy(region + 0x500, pass, sizeof(pass));
 		const hooking::Image regionImage{ reinterpret_cast<std::uintptr_t>(region), 0x1000 };
 		HookTargets moves{};
-		moves.animationGraphPlace = 0x000;
-		moves.reference3DPosition = 0x100;
-		moves.graphAnimation = 0x200;
+		moves.animationGraphPlace = 0x100;
+		moves.reference3DPosition = 0x200;
+		moves.graphAnimation = 0x300;
 		moves.selectiveUpdateCalls = { 0x407, 0x507 };
 		moves.selectiveUpdateBytes = { 0xFF, 0x90, 0x68, 0x01, 0x00, 0x00 };
 

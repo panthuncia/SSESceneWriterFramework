@@ -108,6 +108,7 @@ namespace
 	__declspec(noinline) void FadeLodLevelImpl(void*, float) { trace.push_back("lodLevel"); }
 	__declspec(noinline) void FadeSetRangeImpl(void*, float, float) { trace.push_back("setRange"); }
 	__declspec(noinline) void FadeSetLodTypeImpl(void*, std::uint8_t type) { trace.push_back("lodType " + std::to_string(type)); }
+	__declspec(noinline) std::uint64_t FadeSnapImpl(void*, void*) { trace.push_back("snap"); return 0; }
 
 	template <int V>
 	__declspec(noinline) void MaterialCopy(void*, void*) { trace.push_back("copy " + std::to_string(V)); }
@@ -273,9 +274,9 @@ int main()
 	{
 		auto* region = static_cast<std::uint8_t*>(VirtualAlloc(nullptr, 0x1000, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE));
 		CHECK(region);
-		// writer stubs: `mov al, 1; nop x5; ret`
+		// writer stubs: `mov al, 1; nop x5; ret` (offset 0 is a table's "no address", so they start at 0x100)
 		for (int i = 0; i < 3; ++i) {
-			std::uint8_t* at = region + 0x100 * i;
+			std::uint8_t* at = region + 0x100 * (i + 1);
 			const std::uint8_t body[] = { 0xB0, 0x01, 0x90, 0x90, 0x90, 0x90, 0x90, 0xC3 };
 			std::memcpy(at, body, sizeof(body));
 		}
@@ -285,9 +286,9 @@ int main()
 		std::memcpy(region + 0x500, pass, sizeof(pass));
 		const hooking::Image regionImage{ reinterpret_cast<std::uintptr_t>(region), 0x1000 };
 		HookTargets moves = targets;
-		moves.animationGraphPlace = 0x000;
-		moves.reference3DPosition = 0x100;
-		moves.graphAnimation = 0x200;
+		moves.animationGraphPlace = 0x100;
+		moves.reference3DPosition = 0x200;
+		moves.graphAnimation = 0x300;
 		moves.selectiveUpdateCalls = { 0x407, 0x507 };
 		moves.selectiveUpdateBytes = { 0xFF, 0x90, 0x68, 0x01, 0x00, 0x00 };
 		CHECK(detours::VerifyMoves(regionImage, moves));
@@ -299,9 +300,9 @@ int main()
 		});
 		CHECK(detours::InstallMoves(regionImage, moves));
 		int reference = 0;
-		CHECK(reinterpret_cast<bool (*)(void*)>(region)(&reference));
-		reinterpret_cast<void (*)(void*, bool)>(region + 0x100)(&reference, true);
-		reinterpret_cast<void (*)(void*)>(region + 0x200)(&reference);
+		CHECK(reinterpret_cast<bool (*)(void*)>(region + 0x100)(&reference));
+		reinterpret_cast<void (*)(void*, bool)>(region + 0x200)(&reference, true);
+		reinterpret_cast<void (*)(void*)>(region + 0x300)(&reference);
 		CHECK(movedEvents.size() == 3 && movedEvents[0].writer == SWF_MOVE_ANIMATION_GRAPH_PLACE && movedEvents[1].writer == SWF_MOVE_REFERENCE_3D_POSITION &&
 			  movedEvents[2].writer == SWF_MOVE_GRAPH_ANIMATION && movedEvents[2].key == &reference);
 
@@ -328,6 +329,7 @@ int main()
 	targets.functions[SWF_HOOK_FADE_LOD_LEVEL] = Rva(reinterpret_cast<const void*>(&FadeLodLevelImpl));
 	targets.functions[SWF_HOOK_FADE_SET_RANGE] = Rva(reinterpret_cast<const void*>(&FadeSetRangeImpl));
 	targets.functions[SWF_HOOK_FADE_SET_LOD_TYPE] = Rva(reinterpret_cast<const void*>(&FadeSetLodTypeImpl));
+	targets.functions[SWF_HOOK_FADE_SNAP] = Rva(reinterpret_cast<const void*>(&FadeSnapImpl));
 	CHECK(detours::VerifyCalls(SWF_CAP_FADE_CALLS, image, targets));
 	CHECK(detours::InstallCalls(SWF_CAP_FADE_CALLS, image, targets));
 	callEvents.clear();
@@ -408,7 +410,7 @@ int main()
 		auto* region = static_cast<std::uint8_t*>(VirtualAlloc(nullptr, 0x1000, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE));
 		CHECK(region);
 		// The writers: `ret`. Each caller: `sub rsp, 0x28; call writer; add rsp, 0x28; ret`, its call at +4.
-		const std::uint32_t writers[] = { 0x000, 0x100, 0x200 };
+		const std::uint32_t writers[] = { 0x300, 0x100, 0x200 };  // not 0: a table's "no address"
 		for (const auto writer : writers)
 			region[writer] = 0xC3;
 		auto call = [&](std::uint32_t site, std::uint32_t to) {

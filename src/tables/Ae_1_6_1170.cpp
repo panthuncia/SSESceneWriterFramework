@@ -7,6 +7,9 @@
 //  - one `add` and one `inc` (counters).
 // Some sites are not an NiAVObject's (stack slots, other classes); their events carry keys
 // no scene object has. Two RSP-based sites are left out, because the stub's call moves RSP.
+// Main::Draw's and TESWaterReflections::Update's stores hide a node and show it again within one frame, around views (the
+// first-person skeleton; the water shapes and the player's 3D). They are kept, one event per store, and never merged or dropped:
+// see the README's "Hides within a frame".
 // Comments name the function and the instruction (dword unless stated).
 //
 // Table order is the event's site index; keep it stable within a release.

@@ -170,7 +170,7 @@ namespace
 
 	int UnsupportedRuntime()
 	{
-		SetEnvironmentVariableA("SWF_RUNTIME_OVERRIDE", "0x2");
+		SetEnvironmentVariableA("SWF_RUNTIME_OVERRIDE", "0x8000000000000000");
 		Abc hosts;
 		CHECK(hosts.a.PostLoad() == nullptr);
 		CHECK(hosts.a.Installs() + hosts.b.Installs() + hosts.c.Installs() == 0);
