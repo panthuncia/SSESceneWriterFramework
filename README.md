@@ -18,8 +18,12 @@ Status: pre-release (0.x). The ABI is not frozen until 1.0.0. Only the AE 1.6.11
 | hidden | 464 stores to `NiAVObject::flags` (+0xF4) that can change bit 0 | `SWF_EVENT_HIDDEN`; `SWF_FILTER_SHOW` at the 4 LOD show stores |
 | switch-index | 10 stores to `NiSwitchNode::index` (+0x12C) | `SWF_EVENT_SWITCH_INDEX` (on change) |
 | fade-reset | 11 inline `BSFadeNode::currentFade` (+0x130) resets | `SWF_EVENT_FADE_RESET` |
+| structure | NiNode's 7 child-edit implementations, the classes overriding them, and the remove-all | `SWF_EVENT_CHILD_ATTACHED`, `SWF_EVENT_CHILD_DETACHING` |
+| switch-structural | NiSwitchNode's own 7 child edits | `SWF_EVENT_SWITCH_STRUCTURAL` |
+| moves | 3 reference movers and the cells' 2 update passes | `SWF_EVENT_MOVED` |
+| fade / node / property / geometry / material calls | 35 engine functions and vtable slots (see `SWF_HOOK_*` in `swf.h`) | `SWF_EVENT_CALL(hook)`, before and after, with the arguments |
 
-The provider checks every site's bytes before it writes any of them. A family whose sites another plugin has already changed is left out, and its `SWF_CAP_*` bit stays clear. Each client decides from `GetCaps()` whether it can run.
+The provider checks every site before it writes any of them: store and call-site bytes, and each vtable's RTTI name. A family whose sites another plugin has already changed is left out, and its `SWF_CAP_*` bit stays clear. Each client decides from `GetCaps()` whether it can run.
 
 ## Embedding
 
@@ -78,5 +82,7 @@ The tests cover the frozen ABI layout and the election, with each scenario in it
 - dispatch order.
 
 A dispatch test subscribes hundreds of subscribers to one event and runs nested PRE/POST calls whose scratch spans several arena blocks.
+
+A detour test runs every detour family against fake vtables carrying real RTTI layouts, real detoured functions, and a synthetic call-site region.
 
 A separate store test runs the stubs themselves. It builds a synthetic image from real table entries, patches it the same way the game would be patched, and executes the patched stores. It checks the stored values, the events, the show veto and site resolution.
