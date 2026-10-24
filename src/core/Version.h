@@ -18,5 +18,5 @@ namespace swf::inline SWF_NAMESPACE
 	inline constexpr uint64_t kImplVersion = SWF_MAKE_VERSION(SWF_VERSION_MAJOR, SWF_VERSION_MINOR, SWF_VERSION_PATCH, SWF_VERSION_BUILD);
 
 	/// Runtimes this copy carries address tables for.
-	inline constexpr uint64_t kRuntimeMask = SWF_RUNTIME_AE_1_6_1170 | SWF_RUNTIME_SE_1_5_97;
+	inline constexpr uint64_t kRuntimeMask = SWF_RUNTIME_AE_1_6_1170 | SWF_RUNTIME_SE_1_5_97 | SWF_RUNTIME_AE_1_7_104;
 }

@@ -40,6 +40,14 @@ namespace swf::inline SWF_NAMESPACE
 		std::span<const StoreValueSite> FadeResetStores();
 	}
 
+	namespace tables::ae_1_7_104
+	{
+		std::span<const HiddenStoreSite> HiddenStores();
+		std::span<const std::uint32_t> ShowSites();
+		std::span<const StoreValueSite> SwitchStores();
+		std::span<const StoreValueSite> FadeResetStores();
+	}
+
 	namespace tables::se_1_5_97
 	{
 		std::span<const HiddenStoreSite> HiddenStores();

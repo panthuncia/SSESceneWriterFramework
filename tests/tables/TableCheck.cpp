@@ -1,5 +1,6 @@
-// swf_table_check <SkyrimSE.exe> <se|ae>: every family's verify pass, run against a clean copy of a game executable
-// (an unpacked one: Steam's DRM stub hides the code). The image is mapped at its preferred base, as the game runs it,
+// swf_table_check <SkyrimSE.exe> <se|ae|ae17> <Address Library .bin>: every family's verify pass, run against a clean copy of a
+// game executable (an unpacked one: Steam's DRM stub hides the code), its hook targets resolved through that version's
+// database. The image is mapped at its preferred base, as the game runs it,
 // so vtable slots and call targets hold the addresses the provider would see. Not a ctest: it needs the game's exe.
 #include "core/Log.h"
 #include "families/DetourFamilies.h"
@@ -51,12 +52,14 @@ namespace
 
 int main(int argc, char** argv)
 {
-	if (argc != 3) {
-		std::printf("usage: swf_table_check <SkyrimSE.exe.unpacked.exe> <se|ae>\n");
+	if (argc != 4) {
+		std::printf("usage: swf_table_check <SkyrimSE.exe.unpacked.exe> <se|ae|ae17> <version(lib)-*.bin>\n");
 		return 2;
 	}
+	log::SetSink(&Print);
 	const std::string runtime = argv[2];
-	if (!tables::Select(runtime == "se" ? SWF_RUNTIME_SE_1_5_97 : runtime == "ae" ? SWF_RUNTIME_AE_1_6_1170 : 0)) {
+	const std::uint64_t bit = runtime == "se" ? SWF_RUNTIME_SE_1_5_97 : runtime == "ae" ? SWF_RUNTIME_AE_1_6_1170 : runtime == "ae17" ? SWF_RUNTIME_AE_1_7_104 : 0;
+	if (!tables::Select(bit, std::wstring(argv[3], argv[3] + std::strlen(argv[3])))) {
 		std::printf("unknown runtime '%s'\n", argv[2]);
 		return 2;
 	}
@@ -65,7 +68,6 @@ int main(int argc, char** argv)
 		std::printf("could not map %s at its preferred base\n", argv[1]);
 		return 2;
 	}
-	log::SetSink(&Print);
 
 	const tables::Runtime& table = tables::Active();
 	const HookTargets& targets = *table.targets;

@@ -38,6 +38,7 @@ namespace swf::inline SWF_NAMESPACE
 		std::uint32_t animationGraphPlace;
 		std::uint32_t reference3DPosition;
 		std::uint32_t graphAnimation;
+		std::uint32_t projectileUpdate3D;
 		std::array<std::uint32_t, 2> selectiveUpdateCalls;  // `call [rax + 0x168]` in the cells' update passes
 		std::array<std::uint8_t, 6> selectiveUpdateBytes;
 
@@ -61,13 +62,73 @@ namespace swf::inline SWF_NAMESPACE
 		SceneLayout scene;
 	};
 
+	/// A place inside the function an Address Library id names: a call site, `at` bytes past its start.
+	struct SiteId
+	{
+		std::uint64_t id;
+		std::uint32_t at;
+	};
+
+	/// A vtable as Address Library names it (CommonLib's VTABLE_* ids), with its RTTI type descriptor's name.
+	struct VtableId
+	{
+		std::uint64_t id;
+		const char* rtti;
+	};
+
+	struct CallSiteIds
+	{
+		std::array<SiteId, 8> sites;
+		std::uint32_t count;
+	};
+
+	/// HookTargets as one runtime's Address Library ids, which tables::Select resolves against that runtime's database.
+	/// The functions and vtables are the ids the database gives them; only the call sites inside a function are positioned per
+	/// game version.
+	struct HookIds
+	{
+		VtableId niNode;
+		std::array<VtableId, 3> nodeOverrides;
+		std::uint64_t removeAllChildren;
+		VtableId niSwitchNode;
+
+		std::uint64_t animationGraphPlace;
+		std::uint64_t reference3DPosition;
+		std::uint64_t graphAnimation;
+		std::uint64_t projectileUpdate3D;
+		std::array<SiteId, 2> selectiveUpdateCalls;
+		std::array<std::uint8_t, 6> selectiveUpdateBytes;
+
+		std::array<std::uint64_t, SWF_HOOK_COUNT> functions;
+		VtableId fadeNode;
+		VtableId lightingProperty;
+		VtableId floatController;
+		VtableId colorController;
+		std::array<VtableId, 14> lightingMaterials;
+
+		std::array<CallSiteIds, SWF_HOOK_COUNT> callSites;
+		std::array<VtableId, 3> actors;
+		std::array<std::uint64_t, 5> decalArrayEdits;
+		VtableId instanceShape;
+		VtableId effectFloatController;
+		VtableId effectColorController;
+		VtableId effectMaterial;
+
+		SceneLayout scene;
+	};
+
 	namespace tables::ae_1_6_1170
 	{
-		const HookTargets& Targets();
+		const HookIds& Ids();
+	}
+
+	namespace tables::ae_1_7_104
+	{
+		const HookIds& Ids();
 	}
 
 	namespace tables::se_1_5_97
 	{
-		const HookTargets& Targets();
+		const HookIds& Ids();
 	}
 }

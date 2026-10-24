@@ -40,6 +40,9 @@ set(SWF_CORE_SOURCES
 	"${SWF_ROOT}/src/hooking/Memory.cpp"
 	"${SWF_ROOT}/src/tables/Ae_1_6_1170.cpp"
 	"${SWF_ROOT}/src/tables/Ae_1_6_1170_Hooks.cpp"
+	"${SWF_ROOT}/src/tables/Ae_1_7_104.cpp"
+	"${SWF_ROOT}/src/tables/Ae_1_7_104_Hooks.cpp"
+	"${SWF_ROOT}/src/tables/AddressLibrary.cpp"
 	"${SWF_ROOT}/src/tables/Se_1_5_97.cpp"
 	"${SWF_ROOT}/src/tables/Se_1_5_97_Hooks.cpp"
 	"${SWF_ROOT}/src/tables/Tables.cpp")

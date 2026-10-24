@@ -61,7 +61,7 @@ swf_internal_compile(swf_interop_tests VERSION 0.1.0.0 DEFINITIONS SWF_TESTING)
 target_include_directories(swf_interop_tests PRIVATE ${DETOURS_INCLUDE_DIRS})
 add_test(NAME interop COMMAND swf_interop_tests)
 
-# Every family's verify pass against a clean game executable (`swf_table_check <exe> <se|ae>`): a table checked without
+# Every family's verify pass against a clean game executable (`swf_table_check <exe> <se|ae|ae17> <bin>`): a table checked without
 # launching the game. Linked away from 0x140000000, where it maps the executable.
 add_executable(swf_table_check tables/TableCheck.cpp)
 target_link_libraries(swf_table_check PRIVATE swf_test_core_a)

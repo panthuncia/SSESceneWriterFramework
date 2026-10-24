@@ -269,14 +269,14 @@ int main()
 	Call(niSwitch, 0x38, switchNode.Self(), static_cast<void*>(&a));
 	CHECK(switchEvents.size() == 2);
 
-	// ---- Moves: three detoured writers and a patched `call [rax + 0x168]`, in a synthetic region
+	// ---- Moves: four detoured writers and a patched `call [rax + 0x168]`, in a synthetic region
 	// inside an image that also covers this executable (the writers are its functions).
 	{
 		auto* region = static_cast<std::uint8_t*>(VirtualAlloc(nullptr, 0x1000, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE));
 		CHECK(region);
-		// writer stubs: `mov al, 1; nop x5; ret` (offset 0 is a table's "no address", so they start at 0x100)
-		for (int i = 0; i < 3; ++i) {
-			std::uint8_t* at = region + 0x100 * (i + 1);
+		// writer stubs: `mov al, 1; nop x5; ret` (offset 0 is a table's "no address", so they start at 0x100; the fourth at 0x600)
+		for (int i = 0; i < 4; ++i) {
+			std::uint8_t* at = region + (i < 3 ? 0x100 * (i + 1) : 0x600);
 			const std::uint8_t body[] = { 0xB0, 0x01, 0x90, 0x90, 0x90, 0x90, 0x90, 0xC3 };
 			std::memcpy(at, body, sizeof(body));
 		}
@@ -289,6 +289,7 @@ int main()
 		moves.animationGraphPlace = 0x100;
 		moves.reference3DPosition = 0x200;
 		moves.graphAnimation = 0x300;
+		moves.projectileUpdate3D = 0x600;
 		moves.selectiveUpdateCalls = { 0x407, 0x507 };
 		moves.selectiveUpdateBytes = { 0xFF, 0x90, 0x68, 0x01, 0x00, 0x00 };
 		CHECK(detours::VerifyMoves(regionImage, moves));
@@ -319,6 +320,10 @@ int main()
 		CHECK(updates == 2 && movedEvents.size() == 5 && movedEvents[4].key == mover.Self());
 		reinterpret_cast<void (*)(void*)>(region + 0x500)(mover.Self());
 		CHECK(updates == 3 && movedEvents.size() == 6 && movedEvents[5].writer == SWF_MOVE_SELECTIVE_UPDATE);
+
+		// A projectile's world update: the projectile is the key.
+		reinterpret_cast<void (*)(void*)>(region + 0x600)(&reference);
+		CHECK(movedEvents.size() == 7 && movedEvents[6].writer == SWF_MOVE_PROJECTILE_3D && movedEvents[6].key == &reference);
 	}
 
 	// ---- Fade calls: a detoured slot implementation and four functions.

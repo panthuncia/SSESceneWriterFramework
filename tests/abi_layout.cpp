@@ -108,6 +108,7 @@ static_assert(SWF_FILTER_SHOW == 1);
 static_assert(SWF_CAP_HIDDEN == 1 && SWF_CAP_SWITCH_INDEX == 2 && SWF_CAP_FADE_RESET == 4);
 static_assert(SWF_RUNTIME_AE_1_6_1170 == 1);
 static_assert(SWF_RUNTIME_SE_1_5_97 == 2);
+static_assert(SWF_RUNTIME_AE_1_7_104 == 4);
 static_assert(SWF_MAKE_VERSION(1, 2, 3, 4) == 0x0001000200030004ull);
 
 int main()

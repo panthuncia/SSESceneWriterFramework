@@ -44,6 +44,7 @@ typedef int32_t SWF_Result;
 /* Game runtimes a candidate has address tables for (bit per runtime). */
 #define SWF_RUNTIME_AE_1_6_1170 (1ull << 0)
 #define SWF_RUNTIME_SE_1_5_97 (1ull << 1)
+#define SWF_RUNTIME_AE_1_7_104 (1ull << 2)
 
 /* Candidate states reported by SWF_CandidateInfo::GetState. */
 #define SWF_STATE_IDLE 0
@@ -202,6 +203,7 @@ typedef struct SWF_NodeEvent
 #define SWF_MOVE_REFERENCE_3D_POSITION 1  /* TESObjectREFR::Update3DPosition */
 #define SWF_MOVE_GRAPH_ANIMATION 2        /* FUN_1402f75a0: a reference's graph animation */
 #define SWF_MOVE_SELECTIVE_UPDATE 3       /* the cells' update passes: UpdateSelectedDownwardPass */
+#define SWF_MOVE_PROJECTILE_3D 4          /* Projectile::Update3D (slot 0xAD): a projectile's world update, every frame */
 
 typedef struct SWF_MovedEvent
 {

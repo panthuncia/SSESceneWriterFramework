@@ -149,6 +149,8 @@ namespace swf::client
 		}
 		if (major == 1 && minor == 6 && build == 1170)
 			return SWF_RUNTIME_AE_1_6_1170;
+		if (major == 1 && minor == 7 && build == 104)
+			return SWF_RUNTIME_AE_1_7_104;
 		if (major == 1 && minor == 5 && build == 97)
 			return SWF_RUNTIME_SE_1_5_97;
 		return 0;

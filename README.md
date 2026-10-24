@@ -9,7 +9,16 @@ It ships in two ways:
 
 Every copy in the process is a candidate. At SKSE `kPostLoad` they elect one provider: the newest copy that supports the running game version. That provider installs the hooks and serves the API to everyone. The algorithm is in [`include/swf/swf_client.h`](include/swf/swf_client.h).
 
-Status: pre-release (0.x). The ABI is not frozen until 1.0.0. Only the AE 1.6.1170 tables exist.
+Status: pre-release (0.x). The ABI is not frozen until 1.0.0.
+
+## Game versions
+
+SWF has tables for SE 1.5.97, AE 1.6.1170 and AE 1.7.104, and needs [Address Library for SKSE Plugins](https://www.nexusmods.com/skyrimspecialedition/mods/32444)
+(SWF reads its `Data/SKSE/Plugins/version*-<version>.bin` itself, formats 1, 2 and 5, with no CommonLib). The detour families'
+functions and vtables are Address Library ids, one set for SE and one for every AE version; only the call sites inside a function
+are positioned per version. Without the database no detour family installs. The store families are per-version offsets from a
+program-wide scan of that version's executable, since a store's table must list every store and a scan is the only way to know that
+it does.
 
 ## Hook families
 
@@ -20,7 +29,7 @@ Status: pre-release (0.x). The ABI is not frozen until 1.0.0. Only the AE 1.6.11
 | fade-reset | 11 inline `BSFadeNode::currentFade` (+0x130) resets | `SWF_EVENT_FADE_RESET` |
 | structure | NiNode's 7 child-edit implementations, the classes overriding them, and the remove-all | `SWF_EVENT_CHILD_ATTACHED`, `SWF_EVENT_CHILD_DETACHING` |
 | switch-structural | NiSwitchNode's own 7 child edits | `SWF_EVENT_SWITCH_STRUCTURAL` |
-| moves | 3 reference movers and the cells' 2 update passes | `SWF_EVENT_MOVED` |
+| moves | 4 reference movers (projectiles' world updates among them) and the cells' 2 update passes | `SWF_EVENT_MOVED` |
 | fade / node / property / geometry / material calls | 36 engine functions and vtable slots (see `SWF_HOOK_*` in `swf.h`) | `SWF_EVENT_CALL(hook)`, before and after, with the arguments |
 | actor calls | `Actor::SetAlpha` on 3 vtables, and 3 actor move writers | `SWF_EVENT_CALL(hook)` |
 | decal calls | the 5 edits of a `BGSDecalNode`'s decal array | `SWF_EVENT_CALL(SWF_HOOK_DECAL_ARRAY_EDIT)` |
@@ -158,3 +167,11 @@ A detour test runs every detour family against fake vtables carrying real RTTI l
 An interop test hooks SWF's targets the way other plugins do, both before and after SWF, and checks that every hook runs once, in order. It uses Detours, a hand-rolled prologue hook, vtable swaps and call-site rewrites. It then checks that the integrity check reports exactly the patches rewritten after SWF, and traces each one to its module.
 
 A separate store test runs the stubs themselves. It builds a synthetic image from real table entries, patches it the same way the game would be patched, and executes the patched stores. It checks the stored values, the events, the show veto and site resolution.
+
+Two tools check a game version's tables against its executable (an unpacked copy: Steam's DRM stub hides the code), without
+launching the game:
+
+- `swf_table_check <exe> <se|ae|ae17> <version*-*.bin>` runs every family's verify pass, its targets resolved through that
+  version's Address Library database.
+- `tools/store_scan.py <exe>` (Python, `pip install capstone`) lists every hidden store, and every fade reset's store-then-bit-14
+  site, as table entries. It finds every entry of the SE and AE tables; the AE 1.7.104 tables came from it.

@@ -46,6 +46,14 @@ namespace swf::inline SWF_NAMESPACE::detours
 			Moved(reference, SWF_MOVE_GRAPH_ANIMATION);
 		}
 
+		// Every projectile's world update, each frame (Projectile::Update3D: its 3D's NiAVObject::Update, after UpdateImpl placed it).
+		void (*projectileUpdate3D)(void*) = nullptr;
+		void ProjectileUpdate3D(void* projectile)
+		{
+			projectileUpdate3D(projectile);
+			Moved(projectile, SWF_MOVE_PROJECTILE_3D);
+		}
+
 		// The patched `call [rax + 0x168]`: the node's UpdateSelectedDownwardPass, then its reference
 		// (or the node itself) as the key.
 		void SelectiveUpdate(void* node, void* data, std::uint32_t arg)
@@ -61,10 +69,12 @@ namespace swf::inline SWF_NAMESPACE::detours
 			animationGraphPlace = reinterpret_cast<decltype(animationGraphPlace)>(hooking::At(image, targets.animationGraphPlace));
 			reference3DPosition = reinterpret_cast<decltype(reference3DPosition)>(hooking::At(image, targets.reference3DPosition));
 			graphAnimation = reinterpret_cast<decltype(graphAnimation)>(hooking::At(image, targets.graphAnimation));
+			projectileUpdate3D = reinterpret_cast<decltype(projectileUpdate3D)>(hooking::At(image, targets.projectileUpdate3D));
 			return {
 				{ reinterpret_cast<void**>(&animationGraphPlace), reinterpret_cast<void*>(&AnimationGraphPlace) },
 				{ reinterpret_cast<void**>(&reference3DPosition), reinterpret_cast<void*>(&Reference3DPosition) },
 				{ reinterpret_cast<void**>(&graphAnimation), reinterpret_cast<void*>(&GraphAnimation) },
+				{ reinterpret_cast<void**>(&projectileUpdate3D), reinterpret_cast<void*>(&ProjectileUpdate3D) },
 			};
 		}
 	}
@@ -77,7 +87,7 @@ namespace swf::inline SWF_NAMESPACE::detours
 				return false;
 			}
 		}
-		for (const std::uint32_t offset : { targets.animationGraphPlace, targets.reference3DPosition, targets.graphAnimation })
+		for (const std::uint32_t offset : { targets.animationGraphPlace, targets.reference3DPosition, targets.graphAnimation, targets.projectileUpdate3D })
 			if (!hooking::InImage(image, hooking::At(image, offset)))
 				return false;
 		return true;
@@ -92,7 +102,7 @@ namespace swf::inline SWF_NAMESPACE::detours
 			log::Error("moves: the writers are detoured but the cells' update passes could not be patched");
 			return false;
 		}
-		log::Info("moves: 3 writers detoured, {} update passes patched", targets.selectiveUpdateCalls.size());
+		log::Info("moves: 4 writers detoured, {} update passes patched", targets.selectiveUpdateCalls.size());
 		return true;
 	}
 }
