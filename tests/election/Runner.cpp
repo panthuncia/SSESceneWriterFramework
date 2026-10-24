@@ -3,9 +3,11 @@
 //
 // Hosts: swf_host_a 0.1.0, swf_host_b 0.2.0, swf_host_c 0.2.0, swf_host_d 0.3.0 (late).
 #include "swf/swf.h"
+#include "swf/swf.hpp"
 
 #include <Windows.h>
 
+#include <bit>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -194,10 +196,12 @@ namespace
 		const HMODULE client = LoadLibraryA("swf_client_only.dll");
 		CHECK(client != nullptr);
 		const auto connect = Export<const SWF_Api* (*)()>(client, "TestClient_Connect");
+		const auto connectFuture = Export<const SWF_Api* (*)()>(client, "TestClient_ConnectFuture");
 		Abc hosts;
 		CHECK(connect() == nullptr);  // no provider before the election
 		const SWF_Api* a = hosts.a.PostLoad();
 		CHECK(connect() == a);
+		CHECK(connectFuture() == nullptr);  // the provider is older than the client asks
 		CHECK(hosts.a.Installs() + hosts.b.Installs() + hosts.c.Installs() == 1);
 		return 0;
 	}
@@ -346,6 +350,63 @@ namespace
 	}
 }
 
+namespace
+{
+	// swf.hpp over host a's election: typed subscriptions, kept callables, writes and call arguments.
+	int CppApi()
+	{
+		Abc hosts;
+		CHECK(!swf::Api::Connect());  // no provider before the election
+		const SWF_Api* raw = hosts.a.PostLoad();
+		const swf::Api api = swf::Api::Connect();
+		CHECK(api && api.Raw() == raw && api.AbiMinor() == SWF_ABI_MINOR);
+		const auto info = api.ProviderInfo();
+		CHECK(info && info->candidateCount == 3 && swf::VersionString(info->implVersion) == "0.2.0.0");
+
+		// A callable with state, which the wrapper keeps, and one without, which takes its scratch.
+		int object = 0;
+		std::vector<SWF_Fields> fields;
+		SWF_Subscription subscription = 0;
+		CHECK(api.Subscribe<SWF_EVENT_WRITTEN>(SWF_PHASE_POST, 0, [&fields, &object](const SWF_WrittenEvent& event) {
+			CHECK(event.object == &object);
+			fields.push_back(event.fields);
+		}, &subscription) == SWF_OK);
+		static int statelessCalls = 0;
+		CHECK(api.Subscribe<SWF_EVENT_WRITTEN>(SWF_PHASE_POST, 1, [](const SWF_WrittenEvent&, swf::Scratch scratch) {
+			CHECK(scratch[0] == 0 && scratch[SWF_SCRATCH_WORDS - 1] == 0);
+			++statelessCalls;
+		}) == SWF_OK);
+		CHECK(api.NotifyWritten(&object, SWF_FIELD_FADE) == SWF_OK);
+		CHECK((fields == std::vector<SWF_Fields>{ SWF_FIELD_FADE }) && statelessCalls == 1);
+		CHECK(api.Unsubscribe(subscription) == SWF_OK);
+		CHECK(api.NotifyWritten(&object, SWF_FIELD_HIDDEN) == SWF_OK);
+		CHECK(fields.size() == 1 && statelessCalls == 2);
+		CHECK(api.Subscribe<SWF_EVENT_WRITTEN>(0, 0, [&fields](const SWF_WrittenEvent&) { fields.clear(); }) == SWF_E_INVALID);
+
+		const SWF_Result filter = api.AddFilter<SWF_FILTER_SHOW>(0, [](const SWF_ShowFilterEvent&) { return false; });
+		CHECK(filter == SWF_OK || filter == SWF_E_UNSUPPORTED);
+
+		Fake geometry;
+		CHECK(api.SetHidden(&geometry, true) == SWF_OK && (geometry.Flags() & 1));
+		int changed = 0;
+		CHECK(api.CheckIntegrity([&changed](const SWF_IntegrityEntry&) { ++changed; }) == static_cast<uint32_t>(changed));
+
+		SWF_CallEvent call{};
+		call.argCount = 3;
+		call.args[0] = reinterpret_cast<uintptr_t>(&object);
+		call.args[1] = std::bit_cast<uint32_t>(2.5f);
+		call.args[2] = 1;
+		call.result = static_cast<uint64_t>(-3);
+		CHECK(swf::Arg<int*>(call, 0) == &object && swf::Arg<float>(call, 1) == 2.5f && swf::Arg<bool>(call, 2));
+		CHECK(swf::Arg<uint32_t>(call, 3) == 0 && swf::Result<int32_t>(call) == -3);
+
+		const swf::Api none;
+		CHECK(!none && none.Caps() == 0 && none.NotifyWritten(&object, 0) == SWF_E_NOT_READY);
+		CHECK(none.Subscribe<SWF_EVENT_WRITTEN>(SWF_PHASE_POST, 0, [](const SWF_WrittenEvent&) {}) == SWF_E_NOT_READY);
+		return 0;
+	}
+}
+
 int main(int argc, char** argv)
 {
 	CHECK(argc == 2);
@@ -371,6 +432,7 @@ int main(int argc, char** argv)
 		{ "client_only", &ClientOnly },
 		{ "dispatch", &Dispatch },
 		{ "scene_write", &SceneWrite },
+		{ "cpp_api", &CppApi },
 	};
 	for (const Scenario& scenario : kScenarios)
 		if (std::strcmp(scenario.name, argv[1]) == 0)

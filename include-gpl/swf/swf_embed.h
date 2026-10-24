@@ -1,4 +1,9 @@
-// SceneWriterFramework host integration, for mods that embed SWF (link swf::embedded).
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (c) 2026 Panthuncia. GPL-3.0-or-later with the exceptions in EXCEPTIONS.md.
+//
+// SceneWriterFramework host integration, for mods that embed SWF (link swf::embedded). Embedding
+// compiles SWF's core into the host, so the host is under the GPL; plugins under another license
+// connect to a provider through the interface headers instead (swf/swf_loader.h, swf/swf.hpp).
 //
 // A host calls SWF_Embed_OnPostLoad() from its SKSE kPostLoad message handler. Linking
 // this header's translation unit pulls in the SWF_Candidate_v1 export, which makes the

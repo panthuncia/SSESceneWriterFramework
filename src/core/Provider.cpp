@@ -7,7 +7,7 @@
 #include "families/Stores.h"
 #include "hooking/Integrity.h"
 #include "hooking/Memory.h"
-#include "swf/swf_client.h"
+#include "core/Election.h"
 #include "tables/Tables.h"
 
 #include <Windows.h>
@@ -169,7 +169,7 @@ namespace swf::inline SWF_NAMESPACE::provider
 
 		bool OtherCandidateActive()
 		{
-			for (const auto& candidate : client::FindCandidates())
+			for (const auto& candidate : election::FindCandidates())
 				if (candidate.info->GetState() == SWF_STATE_ACTIVE)
 					return true;
 			return false;
@@ -220,7 +220,7 @@ namespace swf::inline SWF_NAMESPACE::provider
 		}
 #endif
 
-		if (!tables::Select(client::RunningRuntime())) {
+		if (!tables::Select(election::RunningRuntime())) {
 			log::Warn("activation refused: no address tables for this game version");
 			return SWF_E_UNSUPPORTED;
 		}

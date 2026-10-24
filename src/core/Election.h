@@ -1,15 +1,17 @@
-// SceneWriterFramework client: discovery and election, header-only.
+// The provider election, run by every SWF copy at kPostLoad (SWF_Embed_OnPostLoad).
 //
-// Every SWF copy and every client-only mod runs this same code, so the election result
-// does not depend on which copy runs it first. The algorithm is frozen for ABI major 1:
+// Every copy runs this same code, so the result does not depend on which copy runs it first.
+// The algorithm is frozen for ABI major 1:
 //
 //  1. Find every module exporting SWF_Candidate_v1.
 //  2. If one candidate is already active, that is the provider. Done.
-//  3. Otherwise (hosts at kPostLoad only) drop candidates of another ABI major or without
-//     an address table for the running game, then try Activate() in this order:
-//     pinned by SceneWriterFramework.ini first, then implVersion descending, then module
-//     file name ascending (case-insensitive), then full module path ascending.
-//     The first candidate whose Activate() succeeds is the provider.
+//  3. Otherwise drop candidates of another ABI major or without an address table for the
+//     running game, then try Activate() in this order: pinned by SceneWriterFramework.ini
+//     first, then implVersion descending, then module file name ascending (case-insensitive),
+//     then full module path ascending. The first candidate whose Activate() succeeds is the
+//     provider.
+//
+// Clients do not elect: they find the active candidate (swf/swf_loader.h).
 //
 // Testing overrides: SWF_RUNTIME_OVERRIDE (runtime bit mask) and SWF_INI_PATH.
 #pragma once
@@ -29,7 +31,7 @@
 #pragma comment(lib, "psapi.lib")
 #pragma comment(lib, "version.lib")
 
-namespace swf::client
+namespace swf::inline SWF_NAMESPACE::election
 {
 	struct Candidate
 	{
@@ -224,9 +226,8 @@ namespace swf::client
 		return candidates;
 	}
 
-	/// Elects the provider. With `allowActivate` false (client-only mods) it only finds an
-	/// already active provider; SWF hosts pass true from their kPostLoad handler.
-	inline ElectionReport Elect(bool allowActivate)
+	/// Elects the provider: finds the active one, or activates one if none is.
+	inline ElectionReport Elect()
 	{
 		ElectionReport report;
 		report.candidates = FindCandidates();
@@ -236,9 +237,6 @@ namespace swf::client
 			report.alreadyActive = true;
 			return report;
 		}
-		if (!allowActivate)
-			return report;
-
 		report.settings = ReadSettings();
 		report.runtime = RunningRuntime();
 		if (report.settings.disabled || report.runtime == 0)
@@ -287,21 +285,5 @@ namespace swf::client
 			report.failed.push_back(index);
 		}
 		return report;
-	}
-
-	/// The provider's API for this client's ABI minor, or null if no provider is active
-	/// or it is older than this client.
-	inline const SWF_Api* Connect()
-	{
-		const ElectionReport report = Elect(false);
-		const Candidate* provider = report.Provider();
-		return provider ? provider->info->GetApi(SWF_ABI_MINOR) : nullptr;
-	}
-
-	/// Formats a packed implVersion as "major.minor.patch.build".
-	inline std::string VersionString(uint64_t version)
-	{
-		return std::to_string((version >> 48) & 0xFFFF) + "." + std::to_string((version >> 32) & 0xFFFF) + "." +
-		       std::to_string((version >> 16) & 0xFFFF) + "." + std::to_string(version & 0xFFFF);
 	}
 }

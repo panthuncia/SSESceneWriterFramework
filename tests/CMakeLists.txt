@@ -16,19 +16,20 @@ foreach(host version IN ZIP_LISTS hosts host_versions)
 	list(APPEND host_targets swf_host_${host})
 endforeach()
 
-add_library(swf_client_only SHARED election/TestClient.cpp)
-target_include_directories(swf_client_only PRIVATE "${SWF_ROOT}/include")
+# A client under another license: the C loader only, compiled as C.
+add_library(swf_client_only SHARED election/TestClient.c)
+target_link_libraries(swf_client_only PRIVATE swf_interface)
 target_compile_definitions(swf_client_only PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 set_target_properties(swf_client_only PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${SWF_TEST_BIN}")
 
 add_executable(swf_election_tests election/Runner.cpp)
-target_include_directories(swf_election_tests PRIVATE "${SWF_ROOT}/include")
+target_link_libraries(swf_election_tests PRIVATE swf_interface)
 target_compile_definitions(swf_election_tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 set_target_properties(swf_election_tests PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${SWF_TEST_BIN}")
 add_dependencies(swf_election_tests ${host_targets} swf_client_only)
 
 set(scenarios order_abc order_cba fallback all_fail pin_host pin_version disabled
-	unsupported_runtime late_candidate client_only dispatch scene_write)
+	unsupported_runtime late_candidate client_only dispatch scene_write cpp_api)
 foreach(scenario IN LISTS scenarios)
 	add_test(NAME election_${scenario} COMMAND swf_election_tests ${scenario}
 		WORKING_DIRECTORY "${SWF_TEST_BIN}")

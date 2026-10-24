@@ -12,7 +12,7 @@ namespace swf::inline SWF_NAMESPACE::detours
 		constexpr std::size_t kUserData = 0xF8;                     // NiAVObject::userData (SE/AE): its TESObjectREFR*
 		constexpr std::size_t kUpdateSelectedDownwardPass = 0x2D;  // NiAVObject's slot
 
-		void Moved(const void* key, std::uint32_t writer)
+		void Moved(const void* key, std::uint32_t writer, std::uint32_t keyKind = SWF_MOVED_KEY_REFERENCE)
 		{
 			if (!*dispatch::Events().CountWord(SWF_EVENT_MOVED))
 				return;
@@ -21,6 +21,7 @@ namespace swf::inline SWF_NAMESPACE::detours
 			event.header.id = SWF_EVENT_MOVED;
 			event.key = key;
 			event.writer = writer;
+			event.keyKind = keyKind;
 			dispatch::Fire(event.header);
 		}
 
@@ -61,7 +62,10 @@ namespace swf::inline SWF_NAMESPACE::detours
 			using Update = void (*)(void*, void*, std::uint32_t);
 			(*reinterpret_cast<Update* const*>(node))[kUpdateSelectedDownwardPass](node, data, arg);
 			const void* reference = *reinterpret_cast<void* const*>(static_cast<std::byte*>(node) + kUserData);
-			Moved(reference ? reference : node, SWF_MOVE_SELECTIVE_UPDATE);
+			if (reference)
+				Moved(reference, SWF_MOVE_SELECTIVE_UPDATE);
+			else
+				Moved(node, SWF_MOVE_SELECTIVE_UPDATE, SWF_MOVED_KEY_NODE);
 		}
 
 		std::vector<hooking::Detour> MoveDetours(const hooking::Image& image, const HookTargets& targets)

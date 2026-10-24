@@ -7,9 +7,25 @@ It ships in two ways:
 - **Standalone:** `SceneWriterFramework.dll` in `Data/SKSE/Plugins`.
 - **Embedded:** a static library inside another mod. Community Shaders is the first.
 
-Every copy in the process is a candidate. At SKSE `kPostLoad` they elect one provider: the newest copy that supports the running game version. That provider installs the hooks and serves the API to everyone. The algorithm is in [`include/swf/swf_client.h`](include/swf/swf_client.h).
+Every copy in the process is a candidate. At SKSE `kPostLoad` they elect one provider: the newest copy that supports the running game version. That provider installs the hooks and serves the API to everyone. The algorithm is in [`src/core/Election.h`](src/core/Election.h).
 
 Status: pre-release (0.x). The ABI is not frozen until 1.0.0.
+
+## Licensing
+
+SWF is licensed under [GPL-3.0-or-later](COPYING) with the exceptions in [EXCEPTIONS.md](EXCEPTIONS.md), the same terms as
+Community Shaders. The interface headers in [`include/swf`](include/swf) are [MIT](include/swf/LICENSE).
+
+| Use | Files | CMake target | Your plugin's license |
+|---|---|---|---|
+| Call a provider through the C ABI | `swf/swf.h`, `swf/swf_loader.h` | `swf::interface` | any |
+| Call a provider through C++ (engine objects as `void*`) | `swf/swf.hpp` | `swf::interface` | any |
+| C++ with CommonLibSSE-NG's types | `swf/swf_commonlib.h` | `swf::commonlib` | GPL |
+| Embed SWF (compile its core into your plugin) | `swf/swf_embed.h` and `src/` | `swf::embedded` | GPL |
+
+A plugin under another license uses only the interface headers and lists SceneWriterFramework as a requirement: users install
+the standalone plugin, and the plugin connects to whichever provider was elected. EXCEPTIONS.md's Interface Exception says that
+using SWF this way does not make the plugin a work based on SWF.
 
 ## Game versions
 
@@ -40,7 +56,50 @@ it does.
 
 The provider checks every site before it writes any of them: store and call-site bytes, and each vtable's RTTI name. A family whose sites another plugin has already changed is left out, and its `SWF_CAP_*` bit stays clear. Each client decides from `GetCaps()` whether it can run.
 
-## Embedding
+## Connecting (any license)
+
+`swf::interface` (`cmake/SWFInterface.cmake`) is headers only and needs no other package. Connect at SKSE `kPostPostLoad` or later,
+after the election:
+
+```c
+#include "swf/swf_loader.h"  /* C or C++ */
+
+const SWF_Api* api = SWF_Connect(SWF_ABI_MINOR);  /* null: SWF not installed, disabled, or no table for this game version */
+```
+
+```cpp
+#include "swf/swf.hpp"
+
+const swf::Api api = swf::Api::Connect();
+if (api.Has(SWF_CAP_STRUCTURE))
+	api.Subscribe<SWF_EVENT_CHILD_ATTACHED>(SWF_PHASE_POST, 0, [](const SWF_ChildEvent& event) {
+		// event.parent, event.child: on the thread that made the edit
+	});
+```
+
+`swf.hpp`'s callbacks take the event's struct (from the event id), and optionally its `swf::Scratch`. A callable with captures is
+copied and kept for the life of the process, because a dispatch already running may still call it after `Unsubscribe`.
+
+## CommonLib (GPL)
+
+`swf::commonlib` adds `swf/swf_commonlib.h`. Link CommonLibSSE-NG yourself. It wraps `swf.hpp` with `RE::` types:
+
+```cpp
+#include "swf/swf_commonlib.h"
+
+const swf::clib::Api api = swf::clib::Api::Connect();
+api.On<SWF_EVENT_CHILD_ATTACHED>(SWF_PHASE_POST, 0, [](const swf::clib::ChildEvent& event) {
+	RE::NiNode* parent = event.Parent();
+	RE::NiAVObject* child = event.Child();
+});
+api.On<SWF_EVENT_CALL(SWF_HOOK_FADE_UPDATE)>(SWF_PHASE_PRE, 0, [](const swf::clib::CallEvent& call) {
+	auto* fade = call.Arg<RE::BSFadeNode*>(0);
+	const float amount = call.Arg<float>(1);
+});
+api.SetHidden(object, true);  // RE::NiAVObject*
+```
+
+## Embedding (GPL)
 
 ```cmake
 include(extern/SceneWriterFramework/cmake/SWFEmbed.cmake)
@@ -54,14 +113,6 @@ target_link_libraries(MyPlugin PRIVATE swf::embedded)
 case SKSE::MessagingInterface::kPostLoad:
 	swfApi = SWF_Embed_OnPostLoad();  // null: disabled, unsupported runtime, or no provider
 	break;
-```
-
-## Client-only use (no embedded copy)
-
-```cpp
-#include "swf/swf_client.h"
-
-const SWF_Api* api = swf::client::Connect();  // at kPostPostLoad or later
 ```
 
 ## Using the API
@@ -149,7 +200,7 @@ cmake --build --preset vs-release
 ctest --preset vs-release
 ```
 
-The tests cover the frozen ABI layout and the election, with each scenario in its own process. The scenarios use four host DLLs that embed different versions, plus a client-only DLL. They check:
+The tests cover the frozen ABI layout and the election, with each scenario in its own process. The scenarios use four host DLLs that embed different versions, plus a client-only DLL written in C. They check:
 
 - that the result doesn't depend on the order hosts run the election;
 - version tie-breaking;
@@ -157,8 +208,9 @@ The tests cover the frozen ABI layout and the election, with each scenario in it
 - the INI pin and disable settings;
 - an unsupported runtime;
 - a candidate that loads late;
-- client-only connection;
-- dispatch order.
+- client-only connection, through the C loader;
+- dispatch order;
+- `swf.hpp`: typed subscriptions, kept callables, writes and call arguments.
 
 A dispatch test subscribes hundreds of subscribers to one event and runs nested PRE/POST calls whose scratch spans several arena blocks.
 

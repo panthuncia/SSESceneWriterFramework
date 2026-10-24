@@ -92,6 +92,7 @@ FROZEN(SWF_ChildEvent, unchanged, 40);
 FROZEN(SWF_NodeEvent, node, 24);
 FROZEN(SWF_MovedEvent, key, 24);
 FROZEN(SWF_MovedEvent, writer, 32);
+FROZEN(SWF_MovedEvent, keyKind, 36);
 FROZEN(SWF_CallEvent, hook, 24);
 FROZEN(SWF_CallEvent, argCount, 28);
 FROZEN(SWF_CallEvent, args, 32);

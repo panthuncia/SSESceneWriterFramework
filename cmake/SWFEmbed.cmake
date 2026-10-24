@@ -1,12 +1,14 @@
-# Embeds SceneWriterFramework in a host plugin:
+# Embeds SceneWriterFramework in a host plugin, which puts the host under the GPL (EXCEPTIONS.md):
 #
 #   include(path/to/SceneWriterFramework/cmake/SWFEmbed.cmake)
 #   target_link_libraries(MyPlugin PRIVATE swf::embedded)
 #
-# then call SWF_Embed_OnPostLoad() (swf/swf_embed.h) from the SKSE kPostLoad handler.
+# then call SWF_Embed_OnPostLoad() (swf/swf_embed.h) from the SKSE kPostLoad handler. It also
+# defines swf::interface and swf::commonlib (SWFInterface.cmake).
 include_guard(GLOBAL)
 
 include("${CMAKE_CURRENT_LIST_DIR}/SWFVersion.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/SWFInterface.cmake")
 get_filename_component(SWF_ROOT "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
 
 if(NOT TARGET xbyak::xbyak)
@@ -80,9 +82,8 @@ endfunction()
 function(swf_embedded_library name)
 	cmake_parse_arguments(ARG "" "VERSION" "DEFINITIONS" ${ARGN})
 	add_library(${name} STATIC ${SWF_CORE_SOURCES})
-	target_include_directories(${name} PUBLIC "${SWF_ROOT}/include")
-	target_compile_features(${name} PUBLIC cxx_std_20)
-	target_link_libraries(${name} PRIVATE xbyak::xbyak ${DETOURS_LIBRARY})
+	target_include_directories(${name} PUBLIC "${SWF_ROOT}/include-gpl")
+	target_link_libraries(${name} PUBLIC swf_interface PRIVATE xbyak::xbyak ${DETOURS_LIBRARY})
 	target_include_directories(${name} PRIVATE ${DETOURS_INCLUDE_DIRS})
 	swf_internal_compile(${name} VERSION "${ARG_VERSION}" DEFINITIONS ${ARG_DEFINITIONS})
 endfunction()

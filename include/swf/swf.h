@@ -1,4 +1,7 @@
 /*
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Panthuncia. The MIT License: see LICENSE in this directory.
+ *
  * SceneWriterFramework (SWF) public C ABI.
  *
  * Every copy of SWF in the process (the standalone SceneWriterFramework.dll, or a copy
@@ -12,6 +15,11 @@
  *  - Nothing here uses C++ types, CRT ownership or exceptions across the boundary.
  *
  * Until SWF 1.0.0 is tagged the ABI is pre-release and may still change.
+ *
+ * This header and the others in this directory are SWF's interface headers. A plugin that uses SWF only
+ * through them is not bound by the GPL that covers the rest of SWF (EXCEPTIONS.md, "Interface Exception").
+ * Such a plugin connects to the provider with swf/swf_loader.h (C) or swf/swf.hpp (C++), and needs a
+ * provider installed: the SceneWriterFramework plugin, or a mod that embeds it.
  */
 #pragma once
 
@@ -22,7 +30,7 @@ extern "C" {
 #endif
 
 #define SWF_ABI_MAJOR 1
-#define SWF_ABI_MINOR 2 /* 1: CheckIntegrity; 2: Write */
+#define SWF_ABI_MINOR 3 /* 1: CheckIntegrity; 2: Write; 3: SWF_MovedEvent::keyKind */
 
 /* Frozen: name of the export every candidate provides. */
 #define SWF_CANDIDATE_EXPORT "SWF_Candidate_v1"
@@ -205,12 +213,16 @@ typedef struct SWF_NodeEvent
 #define SWF_MOVE_SELECTIVE_UPDATE 3       /* the cells' update passes: UpdateSelectedDownwardPass */
 #define SWF_MOVE_PROJECTILE_3D 4          /* Projectile::Update3D (slot 0xAD): a projectile's world update, every frame */
 
+/* What SWF_MovedEvent::key points to (abiMinor >= 3). */
+#define SWF_MOVED_KEY_REFERENCE 0 /* TESObjectREFR* */
+#define SWF_MOVED_KEY_NODE 1      /* NiAVObject*: a node the cells' update passes moved that has no reference */
+
 typedef struct SWF_MovedEvent
 {
 	SWF_EventHeader header;
-	const void* key; /* TESObjectREFR*, or the NiAVObject* moved when it has no reference */
-	uint32_t writer; /* SWF_MOVE_* */
-	uint32_t reserved;
+	const void* key;  /* SWF_MOVED_KEY_* says which */
+	uint32_t writer;  /* SWF_MOVE_* */
+	uint32_t keyKind; /* SWF_MOVED_KEY_* */
 } SWF_MovedEvent;
 
 /* Engine call hooks. SWF_EVENT_CALL(hook) fires PRE before and POST after the engine function,

@@ -283,8 +283,8 @@ int main()
 		auto* region = static_cast<std::uint8_t*>(VirtualAlloc(nullptr, 0x1000, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE));
 		CHECK(region);
 		const std::uint8_t writer[] = { 0xB0, 0x01, 0x90, 0x90, 0x90, 0x90, 0x90, 0xC3 };  // mov al, 1; nop x5; ret
-		for (int i = 0; i < 3; ++i)  // from 0x100: offset 0 is a table's "no address"
-			std::memcpy(region + 0x100 * (i + 1), writer, sizeof(writer));
+		for (int i = 0; i < 4; ++i)  // from 0x100: offset 0 is a table's "no address"; the fourth at 0x600
+			std::memcpy(region + (i < 3 ? 0x100 * (i + 1) : 0x600), writer, sizeof(writer));
 		// sub rsp, 0x28; mov rax, [rcx]; call [rax + 0x168]; add rsp, 0x28; ret
 		const std::uint8_t pass[] = { 0x48, 0x83, 0xEC, 0x28, 0x48, 0x8B, 0x01, 0xFF, 0x90, 0x68, 0x01, 0x00, 0x00, 0x48, 0x83, 0xC4, 0x28, 0xC3 };
 		std::memcpy(region + 0x400, pass, sizeof(pass));
@@ -294,6 +294,7 @@ int main()
 		moves.animationGraphPlace = 0x100;
 		moves.reference3DPosition = 0x200;
 		moves.graphAnimation = 0x300;
+		moves.projectileUpdate3D = 0x600;
 		moves.selectiveUpdateCalls = { 0x407, 0x507 };
 		moves.selectiveUpdateBytes = { 0xFF, 0x90, 0x68, 0x01, 0x00, 0x00 };
 

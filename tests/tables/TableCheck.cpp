@@ -5,7 +5,7 @@
 #include "core/Log.h"
 #include "families/DetourFamilies.h"
 #include "families/Stores.h"
-#include "swf/swf_client.h"
+#include "core/Election.h"
 #include "tables/Tables.h"
 
 #include <Windows.h>
@@ -91,7 +91,7 @@ int main(int argc, char** argv)
 
 	const std::wstring widePath(argv[1], argv[1] + std::strlen(argv[1]));
 	std::printf("%s tables against %s (its version reads as runtime %#llx)\n", table.name, argv[1],
-		static_cast<unsigned long long>(client::RuntimeOf(widePath.c_str())));
+		static_cast<unsigned long long>(election::RuntimeOf(widePath.c_str())));
 	int failed = 0;
 	auto report = [&](const char* name, bool ok) {
 		std::printf("  %-18s %s\n", name, ok ? "verifies" : "DOES NOT VERIFY");

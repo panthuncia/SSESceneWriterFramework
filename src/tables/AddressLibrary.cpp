@@ -1,7 +1,7 @@
 #include "tables/AddressLibrary.h"
 
 #include "core/Log.h"
-#include "swf/swf_client.h"
+#include "core/Election.h"
 
 #include <cstring>
 #include <fstream>
@@ -126,6 +126,6 @@ namespace swf::inline SWF_NAMESPACE::tables
 		                      runtime == SWF_RUNTIME_AE_1_6_1170   ? L"versionlib-1-6-1170-0.bin" :
 		                      runtime == SWF_RUNTIME_AE_1_7_104    ? L"versionlib-1-7-104-0.bin" :
 		                                                             nullptr;
-		return file ? client::detail::ExeDirectory() + L"Data\\SKSE\\Plugins\\" + file : std::wstring();
+		return file ? election::detail::ExeDirectory() + L"Data\\SKSE\\Plugins\\" + file : std::wstring();
 	}
 }

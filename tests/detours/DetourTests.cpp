@@ -307,23 +307,25 @@ int main()
 		CHECK(movedEvents.size() == 3 && movedEvents[0].writer == SWF_MOVE_ANIMATION_GRAPH_PLACE && movedEvents[1].writer == SWF_MOVE_REFERENCE_3D_POSITION &&
 			  movedEvents[2].writer == SWF_MOVE_GRAPH_ANIMATION && movedEvents[2].key == &reference);
 
-		// The update pass: the node's slot 0x2D runs, then its reference (userData) is the key.
+		// The update pass: the node's slot 0x2D runs, then its reference (userData) is the key, or the node without one.
 		static int updates = 0;
 		FakeVtable& updatable = NewVtable(".?AVUpdatable@@");
 		updatable.slots[0x2D] = reinterpret_cast<void*>(+[](void*, void*, std::uint32_t) { ++updates; });
 		FakeNode mover(&updatable);
 		mover.UserData() = &reference;
 		reinterpret_cast<void (*)(void*)>(region + 0x400)(mover.Self());
-		CHECK(updates == 1 && movedEvents.size() == 4 && movedEvents[3].writer == SWF_MOVE_SELECTIVE_UPDATE && movedEvents[3].key == &reference);
+		CHECK(updates == 1 && movedEvents.size() == 4 && movedEvents[3].writer == SWF_MOVE_SELECTIVE_UPDATE && movedEvents[3].key == &reference &&
+			  movedEvents[3].keyKind == SWF_MOVED_KEY_REFERENCE);
 		mover.UserData() = nullptr;
 		reinterpret_cast<void (*)(void*)>(region + 0x400)(mover.Self());
-		CHECK(updates == 2 && movedEvents.size() == 5 && movedEvents[4].key == mover.Self());
+		CHECK(updates == 2 && movedEvents.size() == 5 && movedEvents[4].key == mover.Self() && movedEvents[4].keyKind == SWF_MOVED_KEY_NODE);
 		reinterpret_cast<void (*)(void*)>(region + 0x500)(mover.Self());
 		CHECK(updates == 3 && movedEvents.size() == 6 && movedEvents[5].writer == SWF_MOVE_SELECTIVE_UPDATE);
 
 		// A projectile's world update: the projectile is the key.
 		reinterpret_cast<void (*)(void*)>(region + 0x600)(&reference);
-		CHECK(movedEvents.size() == 7 && movedEvents[6].writer == SWF_MOVE_PROJECTILE_3D && movedEvents[6].key == &reference);
+		CHECK(movedEvents.size() == 7 && movedEvents[6].writer == SWF_MOVE_PROJECTILE_3D && movedEvents[6].key == &reference &&
+			  movedEvents[6].keyKind == SWF_MOVED_KEY_REFERENCE);
 	}
 
 	// ---- Fade calls: a detoured slot implementation and four functions.
