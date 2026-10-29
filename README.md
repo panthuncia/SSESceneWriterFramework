@@ -169,8 +169,14 @@ like a CommonLib trampoline. On a target another plugin also hooks:
 - **Detours and other prologue hooks** (Detours, MinHook, CommonLib's `detour_thunk`, hand-rolled ones that copy whole
   instructions) chain in either order. The later hook is the outer one.
 - **Vtable swaps** that keep the previous implementation (CommonLib's `write_vfunc`) chain in either order.
-- **Call sites** another plugin rewrote first fail SWF's check, and the family is left out. A rewrite after SWF's that keeps the
-  current call target (`write_call<5>`) chains.
+- **Vtable swaps made before SWF** chain too: the families that detour a slot's implementation (structure, `FadeOnVisible`) take
+  the engine's function from their tables, not from the slot, so another plugin's swapped-in thunk still calls into SWF's detour.
+- **Call sites** chain in either order. A site another plugin rewrote first (`write_call<5>`, or `write_call<6>` at the cells'
+  update passes, to code outside the game) becomes SWF's call, and SWF's hook calls on to the plugin's. SWF writes the update
+  passes in `write_call<6>`'s form, so a rewrite after SWF's that keeps the current call target chains as well. A site that now
+  calls a different function of the game does not match the tables, and the family is left out.
+- **A family installs whole or not at all.** Its call sites' stubs are placed before its detours attach, so a failure leaves
+  nothing of it in.
 - **Unsafe cases.** These break, or hide calls from SWF:
     - a hook installed after SWF that copies a fixed number of prologue bytes, or scans for the original ones;
     - a replacement that never calls the original.
@@ -216,7 +222,7 @@ A dispatch test subscribes hundreds of subscribers to one event and runs nested 
 
 A detour test runs every detour family against fake vtables carrying real RTTI layouts, real detoured functions, and a synthetic call-site region. It also covers the hooks at call sites and the vetoable call filter.
 
-An interop test hooks SWF's targets the way other plugins do, both before and after SWF, and checks that every hook runs once, in order. It uses Detours, a hand-rolled prologue hook, vtable swaps and call-site rewrites. It then checks that the integrity check reports exactly the patches rewritten after SWF, and traces each one to its module.
+An interop test hooks SWF's targets the way other plugins do, both before and after SWF, and checks that every hook runs once, in order. It uses Detours, a hand-rolled prologue hook, vtable swaps and call-site rewrites (`write_call<6>` before and after SWF's). It then checks that the integrity check reports exactly the patches rewritten after SWF, and traces each one to its module.
 
 A separate store test runs the stubs themselves. It builds a synthetic image from real table entries, patches it the same way the game would be patched, and executes the patched stores. It checks the stored values, the events, the show veto and site resolution.
 

@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
 
 namespace swf::inline SWF_NAMESPACE::hooking
 {
@@ -13,6 +14,10 @@ namespace swf::inline SWF_NAMESPACE::hooking
 	/// Snapshots the `length` bytes SWF just wrote at `address` (a detour's jump, a call site, a
 	/// vtable slot), replacing any earlier record of the same address.
 	void Record(std::uint32_t kind, std::uintptr_t address, std::size_t length);
+
+	/// The module the code at `address` leads into, through relays outside any module (stub blocks, trampolines' jump regions):
+	/// its file name, or "no module".
+	std::string LeadsInto(std::uintptr_t address);
 
 	/// Re-reads every recorded patch; for each that changed, follows the new bytes to the code they
 	/// lead to and reports it (and logs it). Returns the number that changed.

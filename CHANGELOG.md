@@ -30,8 +30,12 @@ First release. Supports SE 1.5.97, AE 1.6.1170 and AE 1.7.104.
 | Call families | fade, node, property, geometry, material, actor, decal, LOD segment, tree LOD, tree animation, effect |
 
 - The detour families' targets are Address Library ids, read from the game's own database (formats 1, 2 and 5): one set for SE, one for AE, with per-version positions for the call sites inside a function. The store tables are per-version scans.
-- Every site is verified before anything is written.
-- A family whose sites changed is left out, and its capability bit stays clear.
+- Every site is verified before anything is written. A family installs whole or not at all: its call sites' stubs are placed before its detours attach and written after.
+- Hooks other plugins installed first are chained, not refused:
+  - a vtable slot another plugin swapped: the structure family and `SWF_HOOK_FADE_ON_VISIBLE` detour the engine's implementation, named in the tables, rather than whatever the slot holds;
+  - a call site another plugin rewrote (LOD segments, tree LOD refill, the cells' update passes): SWF's hook calls on to that plugin's.
+- The cells' update passes are rewritten in write_call<6>'s form (`call [rip + rel32]`), so a plugin hooking them after SWF chains too.
+- A family whose sites changed in any other way is left out, and its capability bit stays clear.
 
 ### API
 

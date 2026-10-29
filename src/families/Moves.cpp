@@ -4,6 +4,12 @@
 #include "core/Dispatch.h"
 #include "core/Log.h"
 #include "hooking/Hooks.h"
+#include "hooking/Integrity.h"
+
+#include <cstring>
+#include <iterator>
+#include <tuple>
+#include <vector>
 
 namespace swf::inline SWF_NAMESPACE::detours
 {
@@ -55,17 +61,61 @@ namespace swf::inline SWF_NAMESPACE::detours
 			Moved(projectile, SWF_MOVE_PROJECTILE_3D);
 		}
 
-		// The patched `call [rax + 0x168]`: the node's UpdateSelectedDownwardPass, then its reference
-		// (or the node itself) as the key.
-		void SelectiveUpdate(void* node, void* data, std::uint32_t arg)
+		using Update = void (*)(void*, void*, std::uint32_t);
+
+		// The patched `call [rax + 0x168]` at site N: what the site called (the node's UpdateSelectedDownwardPass, or another plugin's
+		// hook there), then its reference (or the node itself) as the key.
+		template <std::size_t N>
+		struct SelectiveUpdate
 		{
-			using Update = void (*)(void*, void*, std::uint32_t);
-			(*reinterpret_cast<Update* const*>(node))[kUpdateSelectedDownwardPass](node, data, arg);
-			const void* reference = *reinterpret_cast<void* const*>(static_cast<std::byte*>(node) + kUserData);
-			if (reference)
-				Moved(reference, SWF_MOVE_SELECTIVE_UPDATE);
-			else
-				Moved(node, SWF_MOVE_SELECTIVE_UPDATE, SWF_MOVED_KEY_NODE);
+			static inline Update original = nullptr;  // null: the node's slot, as the engine's call
+
+			static void Thunk(void* node, void* data, std::uint32_t arg)
+			{
+				if (original)
+					original(node, data, arg);
+				else
+					(*reinterpret_cast<Update* const*>(node))[kUpdateSelectedDownwardPass](node, data, arg);
+				const void* reference = *reinterpret_cast<void* const*>(static_cast<std::byte*>(node) + kUserData);
+				if (reference)
+					Moved(reference, SWF_MOVE_SELECTIVE_UPDATE);
+				else
+					Moved(node, SWF_MOVE_SELECTIVE_UPDATE, SWF_MOVED_KEY_NODE);
+			}
+		};
+		void* const kSelectiveThunks[] = { reinterpret_cast<void*>(&SelectiveUpdate<0>::Thunk), reinterpret_cast<void*>(&SelectiveUpdate<1>::Thunk) };
+		Update* const kSelectiveOriginals[] = { &SelectiveUpdate<0>::original, &SelectiveUpdate<1>::original };
+
+		/**
+		 * What a selective-update site calls now: the engine's `call [rax + 0x168]` (its bytes; `original` stays null), or another
+		 * plugin's rewrite of it, chained: `call [rip + rel32]` (write_call<6>'s form: the address it holds) or `call rel32` then a NOP,
+		 * either to code outside the image. False for anything else.
+		 */
+		bool SiteOriginal(const hooking::Image& image, const HookTargets& targets, std::uint32_t site, Update& original)
+		{
+			original = nullptr;
+			if (hooking::BytesMatch(image, site, targets.selectiveUpdateBytes.data(), targets.selectiveUpdateBytes.size()))
+				return true;
+			std::uintptr_t target = 0;
+			if (site && static_cast<std::size_t>(site) + 6 <= image.size) {
+				const auto* code = reinterpret_cast<const std::uint8_t*>(image.base + site);
+				if (code[0] == 0xFF && code[1] == 0x15) {
+					std::int32_t displacement = 0;
+					std::memcpy(&displacement, code + 2, sizeof(displacement));
+					const std::uintptr_t slot = image.base + site + 6 + displacement;
+					if (hooking::Readable(slot, sizeof(std::uintptr_t)))
+						target = *reinterpret_cast<const std::uintptr_t*>(slot);
+				} else if (code[5] == 0x90) {
+					target = hooking::CallTarget(image, site);
+				}
+			}
+			if (!target || hooking::InImage(image, target) || !hooking::Executable(target)) {
+				log::Warn("moves: the cells' update pass at +{:#x} is not the expected call", site);
+				return false;
+			}
+			log::Info("moves: the cells' update pass at +{:#x} was rewritten by {}; SWF's hook calls on to it", site, hooking::LeadsInto(target));
+			original = reinterpret_cast<Update>(target);
+			return true;
 		}
 
 		std::vector<hooking::Detour> MoveDetours(const hooking::Image& image, const HookTargets& targets)
@@ -86,10 +136,9 @@ namespace swf::inline SWF_NAMESPACE::detours
 	bool VerifyMoves(const hooking::Image& image, const HookTargets& targets)
 	{
 		for (const std::uint32_t site : targets.selectiveUpdateCalls) {
-			if (!hooking::BytesMatch(image, site, targets.selectiveUpdateBytes.data(), targets.selectiveUpdateBytes.size())) {
-				log::Warn("moves: the cells' update pass at +{:#x} is not the expected call", site);
+			Update original = nullptr;
+			if (!SiteOriginal(image, targets, site, original))
 				return false;
-			}
 		}
 		for (const std::uint32_t offset : { targets.animationGraphPlace, targets.reference3DPosition, targets.graphAnimation, targets.projectileUpdate3D })
 			if (!hooking::InImage(image, hooking::At(image, offset)))
@@ -99,13 +148,24 @@ namespace swf::inline SWF_NAMESPACE::detours
 
 	bool InstallMoves(const hooking::Image& image, const HookTargets& targets)
 	{
-		if (!hooking::AttachAll(MoveDetours(image, targets), "moves"))
-			return false;
-		if (!hooking::PatchCallSites(image, targets.selectiveUpdateCalls, static_cast<std::uint8_t>(targets.selectiveUpdateBytes.size()),
-				reinterpret_cast<void*>(&SelectiveUpdate))) {
-			log::Error("moves: the writers are detoured but the cells' update passes could not be patched");
+		// The update passes' sites take write_call<6>'s form (`call [rip + rel32]`, the instruction's six bytes), so a hook written
+		// there after SWF's keeps SWF's as the call it takes. Their stubs are placed before the writers are detoured and written
+		// after: a failure of either installs nothing.
+		static_assert(std::size(kSelectiveThunks) == std::tuple_size_v<decltype(targets.selectiveUpdateCalls)>);
+		std::vector<hooking::SitePatch> sites;
+		for (std::size_t i = 0; i < targets.selectiveUpdateCalls.size(); ++i) {
+			if (!SiteOriginal(image, targets, targets.selectiveUpdateCalls[i], *kSelectiveOriginals[i]))
+				return false;
+			sites.push_back({ targets.selectiveUpdateCalls[i], static_cast<std::uint8_t>(targets.selectiveUpdateBytes.size()), kSelectiveThunks[i], true });
+		}
+		hooking::PendingCalls pending = hooking::PrepareCallSites(image, sites);
+		if (!pending) {
+			log::Warn("moves: no room for the cells' update passes' stubs");
 			return false;
 		}
+		if (!hooking::AttachAll(MoveDetours(image, targets), "moves"))
+			return false;
+		pending.Commit();
 		log::Info("moves: 4 writers detoured, {} update passes patched", targets.selectiveUpdateCalls.size());
 		return true;
 	}

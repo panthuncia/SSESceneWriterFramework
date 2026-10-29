@@ -4,7 +4,7 @@
 //   - a hand-rolled prologue hook: whole instructions copied to a stub that jumps back, then a
 //     `jmp rel32` written over the function start (MinHook, xbyak-built hooks, write_branch<5>);
 //   - a vtable slot swap that keeps the previous implementation (CommonLib's write_vfunc);
-//   - a call-site rewrite after SWF's that keeps the previous call target (write_call<5>).
+//   - a call-site rewrite before or after SWF's that keeps the previous call target (write_call<6>).
 //
 // Each case checks every hook ran, once, in the order the install order implies: the later hook
 // is the outer one. The integrity check then reports exactly the patches rewritten after SWF's,
@@ -78,21 +78,6 @@ namespace
 		}
 		CHECK(same);
 		trace.clear();
-	}
-
-	// Executable memory within rel32 reach of `target`.
-	std::uint8_t* AllocateNear(const void* target, std::size_t size)
-	{
-		SYSTEM_INFO system{};
-		GetSystemInfo(&system);
-		const std::uintptr_t granularity = system.dwAllocationGranularity;
-		const auto origin = reinterpret_cast<std::uintptr_t>(target) & ~(granularity - 1);
-		for (std::uintptr_t distance = granularity; distance < 0x70000000; distance += granularity) {
-			for (const std::uintptr_t at : { origin + distance, origin - distance })
-				if (void* block = VirtualAlloc(reinterpret_cast<void*>(at), size, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE))
-					return static_cast<std::uint8_t*>(block);
-		}
-		return nullptr;
 	}
 
 	void WriteCode(void* at, const void* bytes, std::size_t size)
@@ -196,6 +181,33 @@ namespace
 		foreignSelectiveUpdate(node, data, arg);
 	}
 
+	// A hook on the update pass's `call [rax + 0x168]` from before SWF: it makes the virtual call itself.
+	void ForeignEarlyUpdate(void* node, void* data, std::uint32_t arg)
+	{
+		trace.push_back("foreign early update pass");
+		(*reinterpret_cast<void (* const* const*)(void*, void*, std::uint32_t)>(node))[0x2D](node, data, arg);
+	}
+
+	/// A write_call<6>: the site becomes `call [rip + rel32]` through an address in a block of its own near it, holding `hook`.
+	/// Returns what the site's `call [rip + rel32]` called before (write_call<6>'s original), or 0 for another instruction.
+	std::uintptr_t WriteCall6(std::uint8_t* site, const void* hook)
+	{
+		std::uintptr_t original = 0;
+		if (site[0] == 0xFF && site[1] == 0x15) {
+			std::int32_t displacement;
+			std::memcpy(&displacement, site + 2, sizeof(displacement));
+			std::memcpy(&original, site + 6 + displacement, sizeof(original));
+		}
+		auto* slot = AllocateNear(site, sizeof(void*));
+		CHECK(slot);
+		std::memcpy(slot, &hook, sizeof(hook));
+		std::uint8_t bytes[6] = { 0xFF, 0x15 };
+		const auto displacement = static_cast<std::int32_t>(reinterpret_cast<std::intptr_t>(slot) - reinterpret_cast<std::intptr_t>(site + 6));
+		std::memcpy(bytes + 2, &displacement, sizeof(displacement));
+		WriteCode(site, bytes, sizeof(bytes));
+		return original;
+	}
+
 	void RecordMoved(const SWF_EventHeader* header, std::uintptr_t*, void*)
 	{
 		trace.push_back("swf moved " + std::to_string(reinterpret_cast<const SWF_MovedEvent*>(header)->writer));
@@ -277,8 +289,8 @@ int main()
 	Call(fadeNode, 0x34, static_cast<void*>(&fade), static_cast<void*>(nullptr), std::int32_t(1));
 	Expect({ Hook("pre", SWF_HOOK_FADE_ON_VISIBLE).c_str(), "engine onVisible", Hook("post", SWF_HOOK_FADE_ON_VISIBLE).c_str() });
 
-	// ---- Call sites: a site another plugin rewrote first is refused (the family is left out); a
-	// rewrite after SWF's that keeps SWF's call target as its original chains.
+	// ---- Call sites: a rewrite before SWF's (to code outside the image) is chained, as is a rewrite after SWF's that keeps SWF's
+	// call target as its original. A rewrite to another function of the image is refused (the family is left out).
 	{
 		auto* region = static_cast<std::uint8_t*>(VirtualAlloc(nullptr, 0x1000, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE));
 		CHECK(region);
@@ -298,12 +310,15 @@ int main()
 		moves.selectiveUpdateCalls = { 0x407, 0x507 };
 		moves.selectiveUpdateBytes = { 0xFF, 0x90, 0x68, 0x01, 0x00, 0x00 };
 
-		// Before SWF: a plugin's `call rel32; nop` over the second site.
+		// Before SWF: `call rel32; nop` over the second site to a function of the image is refused; a write_call<6> of it to a
+		// plugin's hook is chained.
 		std::uint8_t saved[6];
 		std::memcpy(saved, region + 0x507, sizeof(saved));
 		WriteRel32(0xE8, region + 0x507, region + 0x700);
+		region[0x507 + 5] = 0x90;
 		CHECK(!detours::VerifyMoves(regionImage, moves));
 		std::memcpy(region + 0x507, saved, sizeof(saved));
+		CHECK(WriteCall6(region + 0x507, reinterpret_cast<const void*>(&ForeignEarlyUpdate)) == 0);
 		CHECK(detours::VerifyMoves(regionImage, moves));
 		CHECK(detours::InstallMoves(regionImage, moves));
 		dispatch::Entry entry;
@@ -312,21 +327,9 @@ int main()
 		SWF_Subscription subscription = 0;
 		CHECK(dispatch::Events().Add(SWF_EVENT_MOVED, entry, &subscription) == SWF_OK);
 
-		// After SWF: a write_call<5>-style rewrite of the first site, through a stub of its own
-		// within reach, keeping the site's current target (SWF's stub) as its original.
-		auto* site = region + 0x407;
-		CHECK(site[0] == 0xE8);
-		std::int32_t displacement;
-		std::memcpy(&displacement, site + 1, sizeof(displacement));
-		foreignSelectiveUpdate = reinterpret_cast<decltype(foreignSelectiveUpdate)>(site + 5 + displacement);
-		std::uint8_t* stub = region + 0x700;
-		const std::uint8_t movRax[] = { 0x48, 0xB8 };
-		const auto hook = reinterpret_cast<std::uintptr_t>(&ForeignSelectiveUpdate);
-		std::memcpy(stub, movRax, sizeof(movRax));
-		std::memcpy(stub + 2, &hook, sizeof(hook));
-		const std::uint8_t jmpRax[] = { 0xFF, 0xE0 };
-		std::memcpy(stub + 10, jmpRax, sizeof(jmpRax));
-		WriteRel32(0xE8, site, stub);
+		// After SWF: a write_call<6> of the first site, which SWF left in that form, keeping SWF's thunk as its original.
+		foreignSelectiveUpdate = reinterpret_cast<decltype(foreignSelectiveUpdate)>(WriteCall6(region + 0x407, reinterpret_cast<const void*>(&ForeignSelectiveUpdate)));
+		CHECK(foreignSelectiveUpdate);
 
 		static int updates = 0;
 		FakeVtable& updatable = NewVtable(".?AVUpdatable@@");
@@ -337,7 +340,7 @@ int main()
 		const std::string moved = "swf moved " + std::to_string(SWF_MOVE_SELECTIVE_UPDATE);
 		Expect({ "foreign update pass", "engine update pass", moved.c_str() });
 		reinterpret_cast<void (*)(void*)>(region + 0x500)(node);
-		Expect({ "engine update pass", moved.c_str() });
+		Expect({ "foreign early update pass", "engine update pass", moved.c_str() });
 		CHECK(updates == 2);
 	}
 

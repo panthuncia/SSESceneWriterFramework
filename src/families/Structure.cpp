@@ -225,19 +225,21 @@ namespace swf::inline SWF_NAMESPACE::detours
 			return std::ranges::all_of(vtables, [&](const hooking::Vtable& vtable) { return hooking::VtableMatches(image, vtable); });
 		}
 
-		// The structure family's detours: NiNode's slots, the overrides that differ from them and from
-		// each other, and the remove-all.
+		// The structure family's detours: NiNode's implementations, the overrides' that differ from them and from each other, and the
+		// remove-all. The implementations come from the table, so a slot another plugin swapped first still leads to the engine's
+		// (a 0 for one that does not match leaves the family out).
 		std::vector<hooking::Detour> StructureDetours(const hooking::Image& image, const HookTargets& targets, std::vector<std::uintptr_t>& hooked)
 		{
 			std::vector<hooking::Detour> detours;
-			for (const std::size_t slot : kSlots) {
-				const std::uintptr_t target = hooking::SlotTarget(image, targets.niNode, slot);
+			for (std::size_t i = 0; i < std::size(kSlots); ++i) {
+				const std::uintptr_t target = hooking::SlotImplementation(image, targets.niNode, kSlots[i], targets.niNodeEdits[i], "structure");
 				hooked.push_back(target);
-				detours.push_back(EditFor(0, slot, target));
+				detours.push_back(EditFor(0, kSlots[i], target));
 			}
 			for (int n = 0; n < 3; ++n) {
-				for (const std::size_t slot : kSlots) {
-					const std::uintptr_t target = hooking::SlotTarget(image, targets.nodeOverrides[n], slot);
+				for (std::size_t i = 0; i < std::size(kSlots); ++i) {
+					const std::size_t slot = kSlots[i];
+					const std::uintptr_t target = hooking::SlotImplementation(image, targets.nodeOverrides[n], slot, targets.overrideEdits[n][i], "structure");
 					if (std::ranges::find(hooked, target) != hooked.end())
 						continue;
 					hooked.push_back(target);
@@ -254,11 +256,12 @@ namespace swf::inline SWF_NAMESPACE::detours
 		std::vector<hooking::Detour> SwitchDetours(const hooking::Image& image, const HookTargets& targets, std::vector<std::uintptr_t>& hooked)
 		{
 			std::vector<hooking::Detour> detours;
-			for (const std::size_t slot : kSlots) {
-				const std::uintptr_t target = hooking::SlotTarget(image, targets.niSwitchNode, slot);
+			for (std::size_t i = 0; i < std::size(kSlots); ++i) {
+				const std::size_t slot = kSlots[i];
+				const std::uintptr_t target = hooking::SlotImplementation(image, targets.niSwitchNode, slot, targets.switchEdits[i], "switch structural");
 				// An implementation NiSwitchNode inherits is NiNode's: detouring it would make every
 				// node's edit a switch's.
-				if (target == hooking::SlotTarget(image, targets.niNode, slot)) {
+				if (target && target == hooking::SlotImplementation(image, targets.niNode, slot, targets.niNodeEdits[i], "switch structural")) {
 					log::Warn("switch structural: NiSwitchNode slot {:#x} is NiNode's; not hooked", slot);
 					continue;
 				}

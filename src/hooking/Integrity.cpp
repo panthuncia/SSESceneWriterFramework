@@ -30,16 +30,6 @@ namespace swf::inline SWF_NAMESPACE::hooking
 		std::vector<Patch> patches;
 		const char* currentFamily = nullptr;
 
-		bool Readable(std::uintptr_t address, std::size_t length)
-		{
-			MEMORY_BASIC_INFORMATION info{};
-			if (!VirtualQuery(reinterpret_cast<const void*>(address), &info, sizeof(info)) || info.State != MEM_COMMIT)
-				return false;
-			if (info.Protect & (PAGE_NOACCESS | PAGE_GUARD))
-				return false;
-			return address + length <= reinterpret_cast<std::uintptr_t>(info.BaseAddress) + info.RegionSize;
-		}
-
 		HMODULE ModuleAt(std::uintptr_t address)
 		{
 			HMODULE module = nullptr;
@@ -78,11 +68,10 @@ namespace swf::inline SWF_NAMESPACE::hooking
 			return 0;
 		}
 
-		// Where a changed patch now leads: through relays outside any module (stub blocks, trampolines'
-		// jump regions) to the first address inside one, or the last address reached.
-		std::uintptr_t Lead(const Patch& patch)
+		// Where code leads: through relays outside any module (stub blocks, trampolines' jump regions) to the first address inside
+		// one, or the last address reached.
+		std::uintptr_t Follow(std::uintptr_t at)
 		{
-			std::uintptr_t at = patch.kind == SWF_SITE_SLOT ? *reinterpret_cast<const std::uintptr_t*>(patch.address) : JumpTarget(patch.address);
 			for (int hop = 0; at && hop < 4 && !ModuleAt(at); ++hop) {
 				const std::uintptr_t next = JumpTarget(at);
 				if (!next)
@@ -90,6 +79,12 @@ namespace swf::inline SWF_NAMESPACE::hooking
 				at = next;
 			}
 			return at;
+		}
+
+		// Where a changed patch now leads.
+		std::uintptr_t Lead(const Patch& patch)
+		{
+			return Follow(patch.kind == SWF_SITE_SLOT ? *reinterpret_cast<const std::uintptr_t*>(patch.address) : JumpTarget(patch.address));
 		}
 
 		std::string ModuleName(std::uintptr_t address)
@@ -117,6 +112,12 @@ namespace swf::inline SWF_NAMESPACE::hooking
 				return "patch";
 			}
 		}
+	}
+
+	std::string LeadsInto(std::uintptr_t address)
+	{
+		const std::string module = ModuleName(Follow(address));
+		return module.empty() ? "no module" : module;
 	}
 
 	void SetFamily(const char* name)

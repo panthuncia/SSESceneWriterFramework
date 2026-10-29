@@ -50,6 +50,16 @@ namespace swf::inline SWF_NAMESPACE::hooking
 		return { base, nt->OptionalHeader.SizeOfImage };
 	}
 
+	bool Readable(std::uintptr_t address, std::size_t length)
+	{
+		MEMORY_BASIC_INFORMATION info{};
+		if (!VirtualQuery(reinterpret_cast<const void*>(address), &info, sizeof(info)) || info.State != MEM_COMMIT)
+			return false;
+		if (info.Protect & (PAGE_NOACCESS | PAGE_GUARD))
+			return false;
+		return address + length <= reinterpret_cast<std::uintptr_t>(info.BaseAddress) + info.RegionSize;
+	}
+
 	bool BytesMatch(const Image& image, std::uint32_t offset, const std::uint8_t* bytes, std::size_t length)
 	{
 		if (static_cast<std::size_t>(offset) + length > image.size)
@@ -57,41 +67,74 @@ namespace swf::inline SWF_NAMESPACE::hooking
 		return std::memcmp(reinterpret_cast<const void*>(image.base + offset), bytes, length) == 0;
 	}
 
-	std::uint8_t* PatchCalls(const Image& image, std::span<const CallSite> sites, std::span<const std::uint8_t> stubs, std::span<const std::size_t> entries)
+	PendingCalls::PendingCalls(const Image& image, std::span<const CallSite> sites, std::span<const std::uint8_t> stubs, std::span<const std::size_t> entries) :
+		image(image), sites(sites.begin(), sites.end()), entries(entries.begin(), entries.end())
 	{
-		// A block of its own just past the image: every `call rel32` must reach it.
+		// A block of its own just past the image: every `call rel32` (or `call [rip + rel32]`) must reach it.
 		SYSTEM_INFO system{};
 		GetSystemInfo(&system);
 		const std::uintptr_t granularity = system.dwAllocationGranularity;
 		const std::uintptr_t imageEnd = image.base + image.size;
-		std::uint8_t* code = nullptr;
 		for (std::uintptr_t at = (imageEnd + granularity - 1) & ~(granularity - 1); !code && at < imageEnd + 0x10000000; at += granularity)
 			code = static_cast<std::uint8_t*>(VirtualAlloc(reinterpret_cast<void*>(at), stubs.size(), MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE));
 		if (!code) {
 			log::Warn("no free memory within reach of the image for {} bytes of stubs", stubs.size());
-			return nullptr;
+			return;
 		}
 		for (std::size_t i = 0; i < sites.size(); ++i) {
-			if (!CallReaches(image.base + sites[i].offset, reinterpret_cast<std::uintptr_t>(code + entries[i]))) {
+			if (!CallReaches(image.base + sites[i].offset + (sites[i].indirect ? 1 : 0), reinterpret_cast<std::uintptr_t>(code + entries[i]))) {
 				VirtualFree(code, 0, MEM_RELEASE);
-				log::Warn("stubs at {} are out of reach of the site at +{:#x}", static_cast<void*>(code), sites[i].offset);
-				return nullptr;
+				code = nullptr;
+				log::Warn("stubs are out of reach of the site at +{:#x}", sites[i].offset);
+				return;
 			}
 		}
-
 		std::memcpy(code, stubs.data(), stubs.size());
 		FlushInstructionCache(GetCurrentProcess(), code, stubs.size());
+	}
+
+	PendingCalls::PendingCalls(PendingCalls&& other) noexcept :
+		image(other.image), sites(std::move(other.sites)), entries(std::move(other.entries)), code(other.code), committed(other.committed)
+	{
+		other.code = nullptr;
+	}
+
+	PendingCalls::~PendingCalls()
+	{
+		if (code && !committed)
+			VirtualFree(code, 0, MEM_RELEASE);
+	}
+
+	std::uint8_t* PendingCalls::Commit()
+	{
+		if (!code)
+			return nullptr;
 		for (std::size_t i = 0; i < sites.size(); ++i) {
 			const std::uintptr_t at = image.base + sites[i].offset;
+			const auto entry = reinterpret_cast<std::intptr_t>(code + entries[i]);
 			std::array<std::uint8_t, 16> patch;
 			patch.fill(0x90);
-			patch[0] = 0xE8;
-			const auto displacement = static_cast<std::int32_t>(reinterpret_cast<std::intptr_t>(code + entries[i]) - static_cast<std::intptr_t>(at + 5));
-			std::memcpy(patch.data() + 1, &displacement, sizeof(displacement));
+			std::size_t opcode = 1;
+			if (sites[i].indirect) {
+				patch[0] = 0xFF;
+				patch[1] = 0x15;
+				opcode = 2;
+			} else {
+				patch[0] = 0xE8;
+			}
+			const auto displacement = static_cast<std::int32_t>(entry - static_cast<std::intptr_t>(at + opcode + 4));
+			std::memcpy(patch.data() + opcode, &displacement, sizeof(displacement));
 			WriteCode(at, patch.data(), sites[i].length);
 			Record(SWF_SITE_CALL, at, sites[i].length);
 		}
+		committed = true;
 		return code;
+	}
+
+	std::uint8_t* PatchCalls(const Image& image, std::span<const CallSite> sites, std::span<const std::uint8_t> stubs, std::span<const std::size_t> entries)
+	{
+		PendingCalls pending(image, sites, stubs, entries);
+		return pending ? pending.Commit() : nullptr;
 	}
 
 	void RegisterStubs(std::uint32_t eventId, const std::uint8_t* code, std::size_t codeSize, std::vector<std::size_t> entries, std::vector<std::uint32_t> siteOffsets)

@@ -4,6 +4,8 @@
 // it reads the game's: [locator][type descriptor][slot -1][slots...], all inside this image.
 #include "hooking/Hooks.h"
 
+#include <Windows.h>
+
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -64,5 +66,36 @@ namespace fake
 	void Call(Vtable& vtable, std::size_t slot, A... args)
 	{
 		reinterpret_cast<void (*)(A...)>(vtable.slots[slot])(args...);
+	}
+
+	/// Executable memory within rel32 reach of `target`.
+	inline std::uint8_t* AllocateNear(const void* target, std::size_t size)
+	{
+		SYSTEM_INFO system{};
+		GetSystemInfo(&system);
+		const std::uintptr_t granularity = system.dwAllocationGranularity;
+		const auto origin = reinterpret_cast<std::uintptr_t>(target) & ~(granularity - 1);
+		for (std::uintptr_t distance = granularity; distance < 0x70000000; distance += granularity) {
+			for (const std::uintptr_t at : { origin + distance, origin - distance })
+				if (void* block = VirtualAlloc(reinterpret_cast<void*>(at), size, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE))
+					return static_cast<std::uint8_t*>(block);
+		}
+		return nullptr;
+	}
+
+	/// Another plugin's relay outside the image, within rel32 reach of `site`: `mov rax, to; jmp rax`, as a hook's trampoline
+	/// region holds.
+	inline void* ForeignRelay(const void* site, const void* to)
+	{
+		auto* stub = AllocateNear(site, 16);
+		CHECK(stub);
+		const auto address = reinterpret_cast<std::uintptr_t>(to);
+		stub[0] = 0x48;
+		stub[1] = 0xB8;
+		std::memcpy(stub + 2, &address, sizeof(address));
+		stub[10] = 0xFF;
+		stub[11] = 0xE0;
+		FlushInstructionCache(GetCurrentProcess(), stub, 16);
+		return stub;
 	}
 }

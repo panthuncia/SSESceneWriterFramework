@@ -6,6 +6,9 @@
 #include "core/Log.h"
 #include "hooking/Hooks.h"
 
+#include <algorithm>
+#include <optional>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -74,11 +77,16 @@ namespace swf::inline SWF_NAMESPACE::detours
 		template <std::uint32_t V>
 		using DecalArrayEdit = Hook<SWF_HOOK_DECAL_ARRAY_EDIT, void(void*, void*, void*, void*), V>;
 
-		using LodSegmentShow = Hook<SWF_HOOK_LOD_SEGMENT_SHOW, void(void*, std::uint64_t)>;
-		using LodSegmentHide = Hook<SWF_HOOK_LOD_SEGMENT_HIDE, void(void*, std::uint64_t)>;
-		using LodSegmentShowAll = Hook<SWF_HOOK_LOD_SEGMENT_SHOW_ALL, void(void*)>;
+		// The site-hooked ones: one instance per call site, each calling on to what its site called.
+		template <std::uint32_t V>
+		using LodSegmentShow = Hook<SWF_HOOK_LOD_SEGMENT_SHOW, void(void*, std::uint64_t), V>;
+		template <std::uint32_t V>
+		using LodSegmentHide = Hook<SWF_HOOK_LOD_SEGMENT_HIDE, void(void*, std::uint64_t), V>;
+		template <std::uint32_t V>
+		using LodSegmentShowAll = Hook<SWF_HOOK_LOD_SEGMENT_SHOW_ALL, void(void*), V>;
 
-		using TreeLodRefill = Hook<SWF_HOOK_TREE_LOD_REFILL, void(void*, void*)>;
+		template <std::uint32_t V>
+		using TreeLodRefill = Hook<SWF_HOOK_TREE_LOD_REFILL, void(void*, void*), V>;
 		using InstanceAddGroup = Hook<SWF_HOOK_INSTANCE_ADD_GROUP, std::uint32_t(void*, std::uint32_t, const std::uint16_t*, std::uint32_t, float)>;
 		using InstanceRemoveGroup = Hook<SWF_HOOK_INSTANCE_REMOVE_GROUP, void(void*, std::uint32_t)>;
 
@@ -96,8 +104,8 @@ namespace swf::inline SWF_NAMESPACE::detours
 			std::vector<hooking::Detour> detours;
 			std::vector<hooking::SlotSwap> swaps;
 			std::vector<hooking::SitePatch> sites;
-			std::vector<std::uintptr_t> siteTargets;  // the function each site calls
-			std::vector<std::uintptr_t> targets;      // every function a detour starts at, or a site calls
+			std::vector<std::uintptr_t> siteTargets;  // what each site calls now (0: not the engine's call, nor a hook chaining to it)
+			std::vector<std::uintptr_t> targets;      // every engine function a detour starts at, or a site calls
 			std::vector<hooking::Vtable> vtables;
 		};
 
@@ -116,18 +124,33 @@ namespace swf::inline SWF_NAMESPACE::detours
 			plan.vtables.push_back(vtable);
 		}
 
-		// Every call site of the hook's function, rewritten to call H's thunk, which calls on to the function.
-		template <class H>
-		void PatchAt(Plan& plan, const hooking::Image& image, const HookTargets& targets, std::uint32_t hook)
+		const char* NameOf(SWF_Caps family);
+
+		// Every call site of the hook's function, rewritten to call a thunk of its own (H<site>), which calls on to what the site
+		// called: the engine function, or another plugin's hook there that calls on to it (as write_call<5> keeps the call it took).
+		template <template <std::uint32_t> class H, std::uint32_t... V>
+		void PatchAt(Plan& plan, const hooking::Image& image, const HookTargets& targets, SWF_Caps family, std::uint32_t hook,
+			std::integer_sequence<std::uint32_t, V...>)
 		{
-			const std::uintptr_t target = hooking::At(image, targets.functions[hook]);
-			H::original = reinterpret_cast<decltype(H::original)>(target);
+			static_assert(sizeof...(V) == std::tuple_size_v<decltype(CallSites::offsets)>);
+			const std::uintptr_t engine = hooking::At(image, targets.functions[hook]);
 			const CallSites& sites = targets.callSites[hook];
-			for (std::uint32_t i = 0; i < sites.count; ++i) {
-				plan.sites.push_back({ sites.offsets[i], 5, H::ThunkAddress() });
-				plan.siteTargets.push_back(target);
-			}
-			plan.targets.push_back(target);
+			auto patch = [&]<class S>(std::uint32_t i) {
+				if (i >= sites.count)
+					return;
+				const std::uintptr_t current = hooking::ChainedCallTarget(image, sites.offsets[i], engine, NameOf(family));
+				S::original = reinterpret_cast<decltype(S::original)>(current);
+				plan.sites.push_back({ sites.offsets[i], 5, S::ThunkAddress() });
+				plan.siteTargets.push_back(current);
+			};
+			(patch.template operator()<H<V>>(V), ...);
+			plan.targets.push_back(engine);
+		}
+
+		template <template <std::uint32_t> class H>
+		void PatchAt(Plan& plan, const hooking::Image& image, const HookTargets& targets, SWF_Caps family, std::uint32_t hook)
+		{
+			PatchAt<H>(plan, image, targets, family, hook, std::make_integer_sequence<std::uint32_t, 8>{});
 		}
 
 		template <std::uint32_t... V>
@@ -146,15 +169,15 @@ namespace swf::inline SWF_NAMESPACE::detours
 				...);
 		}
 
-		// Builds the plan without touching memory beyond reading vtable slots, which only happens once
-		// every vtable it reads has matched its RTTI (the verify pass).
+		// Builds the plan without touching memory beyond reading vtable slots and call sites, which only happens once every vtable
+		// it reads has matched its RTTI (the verify pass).
 		bool Build(SWF_Caps family, const hooking::Image& image, const HookTargets& targets, Plan& plan, bool readSlots)
 		{
 			switch (family) {
 			case SWF_CAP_FADE_CALLS:
 				plan.vtables.push_back(targets.fadeNode);
 				if (readSlots)
-					DetourAt<FadeOnVisible>(plan, hooking::SlotTarget(image, targets.fadeNode, 0x34));
+					DetourAt<FadeOnVisible>(plan, hooking::SlotImplementation(image, targets.fadeNode, 0x34, targets.fadeOnVisible, "fade calls"));
 				DetourAt<FadeUpdate>(plan, hooking::At(image, targets.functions[SWF_HOOK_FADE_UPDATE]));
 				DetourAt<FadeLodLevel>(plan, hooking::At(image, targets.functions[SWF_HOOK_FADE_LOD_LEVEL]));
 				DetourAt<FadeSetRange>(plan, hooking::At(image, targets.functions[SWF_HOOK_FADE_SET_RANGE]));
@@ -212,12 +235,15 @@ namespace swf::inline SWF_NAMESPACE::detours
 				DetourDecals(plan, image, targets, std::make_integer_sequence<std::uint32_t, 5>{});
 				return true;
 			case SWF_CAP_LOD_SEGMENT_CALLS:
-				PatchAt<LodSegmentShow>(plan, image, targets, SWF_HOOK_LOD_SEGMENT_SHOW);
-				PatchAt<LodSegmentHide>(plan, image, targets, SWF_HOOK_LOD_SEGMENT_HIDE);
-				PatchAt<LodSegmentShowAll>(plan, image, targets, SWF_HOOK_LOD_SEGMENT_SHOW_ALL);
+				if (readSlots) {
+					PatchAt<LodSegmentShow>(plan, image, targets, family, SWF_HOOK_LOD_SEGMENT_SHOW);
+					PatchAt<LodSegmentHide>(plan, image, targets, family, SWF_HOOK_LOD_SEGMENT_HIDE);
+					PatchAt<LodSegmentShowAll>(plan, image, targets, family, SWF_HOOK_LOD_SEGMENT_SHOW_ALL);
+				}
 				return true;
 			case SWF_CAP_TREE_LOD_CALLS:
-				PatchAt<TreeLodRefill>(plan, image, targets, SWF_HOOK_TREE_LOD_REFILL);
+				if (readSlots)
+					PatchAt<TreeLodRefill>(plan, image, targets, family, SWF_HOOK_TREE_LOD_REFILL);
 				SwapSlot<InstanceAddGroup>(plan, image, targets.instanceShape, 0x3C);
 				SwapSlot<InstanceRemoveGroup>(plan, image, targets.instanceShape, 0x3D);
 				return true;
@@ -284,14 +310,9 @@ namespace swf::inline SWF_NAMESPACE::detours
 				return false;
 			}
 		}
-		// A call site another plugin rewrote no longer calls the engine function: the family is left out.
-		for (std::size_t i = 0; i < plan.sites.size(); ++i) {
-			if (!hooking::CallsTo(image, plan.sites[i].offset, plan.siteTargets[i])) {
-				log::Warn("{}: the call at +{:#x} is not the engine's call of +{:#x}", NameOf(family), plan.sites[i].offset, plan.siteTargets[i] - image.base);
-				return false;
-			}
-		}
-		return true;
+		// A call site that calls neither the engine function nor another plugin's hook (ChainedCallTarget logged it): the family is
+		// left out.
+		return std::ranges::find(plan.siteTargets, std::uintptr_t(0)) == plan.siteTargets.end();
 	}
 
 	bool InstallCalls(SWF_Caps family, const hooking::Image& image, const HookTargets& targets)
@@ -302,12 +323,21 @@ namespace swf::inline SWF_NAMESPACE::detours
 		for (const std::uintptr_t target : plan.targets)
 			if (!hooking::InImage(image, target))
 				return false;
+		if (std::ranges::find(plan.siteTargets, std::uintptr_t(0)) != plan.siteTargets.end())
+			return false;
+		// The sites' stubs are placed first and written last: a family whose sites or detours fail installs nothing.
+		std::optional<hooking::PendingCalls> sites;
+		if (!plan.sites.empty()) {
+			sites.emplace(hooking::PrepareCallSites(image, plan.sites));
+			if (!*sites) {
+				log::Warn("{}: no room for the call sites' stubs", NameOf(family));
+				return false;
+			}
+		}
 		if (!hooking::AttachAll(plan.detours, NameOf(family)))
 			return false;
-		if (!plan.sites.empty() && !hooking::PatchCallSites(image, plan.sites)) {
-			log::Error("{}: the call sites could not be patched{}", NameOf(family), plan.detours.empty() ? "" : " (its detours are in)");
-			return false;
-		}
+		if (sites)
+			sites->Commit();
 		hooking::SwapAll(plan.swaps);
 		log::Info("{}: {} detours, {} vtable slots, {} call sites", NameOf(family), plan.detours.size(), plan.swaps.size(), plan.sites.size());
 		return true;

@@ -77,6 +77,15 @@ namespace swf::inline SWF_NAMESPACE::tables::ae_1_6_1170
 			} },
 			.removeAllChildren = 70295,  // FUN_140d1d630: every child let go at once, bypassing the slots
 			.niSwitchNode = { 237185, ".?AVNiSwitchNode@@" },
+			// The implementations in those slots (0x35, 0x37-0x3C): BSParticleSystemManager overrides all seven, BGSDecalNode the
+			// attach, BSFaceGenNiNode none.
+			.niNodeEdits = { 70289, 70292, 70291, 70294, 70293, 70297, 70296 },
+			.overrideEdits = { {
+				{ 76590, 76592, 76591, 76594, 76593, 76596, 76595 },
+				{ 15287, 70292, 70291, 70294, 70293, 70297, 70296 },
+				{ 70289, 70292, 70291, 70294, 70293, 70297, 70296 },
+			} },
+			.switchEdits = { 70578, 70580, 70579, 70582, 70581, 70584, 70583 },
 			.animationGraphPlace = 37364,  // FUN_14066afa0
 			.reference3DPosition = 19517,  // TESObjectREFR::Update3DPosition
 			.graphAnimation = 20120,       // FUN_1402f75a0
@@ -85,6 +94,7 @@ namespace swf::inline SWF_NAMESPACE::tables::ae_1_6_1170
 			.selectiveUpdateBytes = { 0xFF, 0x90, 0x68, 0x01, 0x00, 0x00 },
 			.functions = Functions(),
 			.fadeNode = { 252901, ".?AVBSFadeNode@@" },
+			.fadeOnVisible = 105485,  // BSFadeNode::OnVisible (slot 0x34)
 			.lightingProperty = { 254668, ".?AVBSLightingShaderProperty@@" },
 			.floatController = { 255429, ".?AVBSLightingShaderPropertyFloatController@@" },
 			.colorController = { 255443, ".?AVBSLightingShaderPropertyColorController@@" },

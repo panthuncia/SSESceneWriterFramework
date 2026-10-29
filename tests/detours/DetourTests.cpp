@@ -72,6 +72,9 @@ namespace
 	__declspec(noinline) void SwitchAttach(void* self, void* child, bool first) { trace.push_back("switch-attach"), NodeAttach(self, child, first); }
 	__declspec(noinline) void SwitchOther(void* self, void*) { trace.push_back("switch-other"), (void)self; }
 
+	// Another plugin's swap of NiNode's attach, before SWF: it calls on to the engine's, as write_vfunc's thunks do.
+	void ForeignAttach(void* self, void* child, bool first) { trace.push_back("foreign attach"), NodeAttach(self, child, first); }
+
 	void FillNodeSlots(FakeVtable& vtable)
 	{
 		vtable.slots[0x35] = reinterpret_cast<void*>(&NodeAttach);
@@ -216,6 +219,13 @@ int main()
 	targets.removeAllChildren = Rva(reinterpret_cast<const void*>(&NodeRemoveAll));
 	targets.niSwitchNode = Ref(niSwitch);
 
+	// The table names the engine's implementations. A slot holding another function of the image does not match it: the family is
+	// left out. A slot another plugin swapped first (its relay outside the image) still leads SWF to the engine's attach.
+	targets.niNodeEdits[0] = Rva(reinterpret_cast<const void*>(&NodeAttach));
+	targets.niNodeEdits[1] = Rva(reinterpret_cast<const void*>(&NodeDetach2));
+	CHECK(!detours::VerifyStructure(image, targets));
+	targets.niNodeEdits[1] = Rva(reinterpret_cast<const void*>(&NodeDetach1));
+	niNode.slots[0x35] = ForeignRelay(niNode.slots, reinterpret_cast<const void*>(&ForeignAttach));
 	CHECK(detours::VerifyStructure(image, targets));
 	CHECK(detours::InstallStructure(image, targets));
 	CHECK(detours::VerifySwitchStructural(image, targets));
@@ -242,6 +252,7 @@ int main()
 	Call(niNode, 0x35, node.Self(), static_cast<void*>(&a), false);
 	Call(niNode, 0x35, node.Self(), static_cast<void*>(&b), false);
 	CHECK(childEvents.size() == 2 && childEvents[0].header.id == SWF_EVENT_CHILD_ATTACHED && childEvents[1].child == &b && node.children[1] == &b);
+	CHECK(trace.size() >= 2 && trace[trace.size() - 2] == "foreign attach" && trace.back() == "attach");
 	Call(niNode, 0x39, node.Self(), std::uint32_t(0), static_cast<void*>(nullptr));  // DetachChildAt(0): a
 	CHECK(childEvents.size() == 3 && childEvents[2].header.id == SWF_EVENT_CHILD_DETACHING && childEvents[2].child == &a && !node.children[0]);
 	Call(niNode, 0x3C, node.Self(), std::uint32_t(1), static_cast<void*>(&c));  // SetAt(1, c) over b
@@ -411,8 +422,9 @@ int main()
 		CHECK(remove(&manager, &kept) == 7);
 	}
 
-	// ---- LOD segment calls: hooked at their call sites, in a synthetic region; a site that calls
-	// elsewhere leaves the family out.
+	// ---- LOD segment calls: hooked at their call sites, in a synthetic region; a site that calls another function of the image
+	// leaves the family out, and one another plugin rewrote first (to code outside the image) is chained: SWF's thunk calls the
+	// plugin's hook, which calls the writer.
 	{
 		auto* region = static_cast<std::uint8_t*>(VirtualAlloc(nullptr, 0x1000, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE));
 		CHECK(region);
@@ -442,7 +454,11 @@ int main()
 		lod.callSites[SWF_HOOK_LOD_SEGMENT_SHOW_ALL] = { { 0x444, 0x464 }, 2 };
 		call(0x464, writers[1]);
 		CHECK(!detours::VerifyCalls(SWF_CAP_LOD_SEGMENT_CALLS, regionImage, lod));
-		call(0x464, writers[2]);
+		static void (*writer)(void*) = nullptr;
+		writer = reinterpret_cast<void (*)(void*)>(region + writers[2]);
+		const void* relay = ForeignRelay(region, reinterpret_cast<const void*>(+[](void* shape) { trace.push_back("foreign showAll"), writer(shape); }));
+		const auto displacement = static_cast<std::int32_t>(reinterpret_cast<std::intptr_t>(relay) - reinterpret_cast<std::intptr_t>(region + 0x464 + 5));
+		std::memcpy(region + 0x464 + 1, &displacement, sizeof(displacement));
 		CHECK(detours::VerifyCalls(SWF_CAP_LOD_SEGMENT_CALLS, regionImage, lod));
 		CHECK(detours::InstallCalls(SWF_CAP_LOD_SEGMENT_CALLS, regionImage, lod));
 		for (std::uint32_t hook = SWF_HOOK_LOD_SEGMENT_SHOW; hook <= SWF_HOOK_LOD_SEGMENT_SHOW_ALL; ++hook)
@@ -452,7 +468,9 @@ int main()
 		reinterpret_cast<void (*)(void*, std::uint64_t)>(region + 0x400)(&shape, 3);
 		reinterpret_cast<void (*)(void*, std::uint64_t)>(region + 0x420)(&shape, 4);
 		reinterpret_cast<void (*)(void*)>(region + 0x440)(&shape);
+		trace.clear();
 		reinterpret_cast<void (*)(void*)>(region + 0x460)(&shape);
+		CHECK(trace.size() == 1 && trace[0] == "foreign showAll");
 		CHECK(callEvents.size() == 4 && callEvents[0].hook == SWF_HOOK_LOD_SEGMENT_SHOW && callEvents[0].args[1] == 3);
 		CHECK(callEvents[1].hook == SWF_HOOK_LOD_SEGMENT_HIDE && callEvents[1].args[1] == 4 && callEvents[1].args[0] == reinterpret_cast<std::uintptr_t>(&shape));
 		CHECK(callEvents[2].hook == SWF_HOOK_LOD_SEGMENT_SHOW_ALL && callEvents[3].hook == SWF_HOOK_LOD_SEGMENT_SHOW_ALL);

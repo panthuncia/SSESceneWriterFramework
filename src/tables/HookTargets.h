@@ -33,6 +33,11 @@ namespace swf::inline SWF_NAMESPACE
 		std::array<hooking::Vtable, 3> nodeOverrides;  // BSParticleSystemManager, BGSDecalNode, BSFaceGenNiNode
 		std::uint32_t removeAllChildren;
 		hooking::Vtable niSwitchNode;
+		// The engine functions behind those slots (0x35, 0x37-0x3C), detoured even where another plugin swapped a slot first; 0 where
+		// the table has none (the slot's implementation is detoured).
+		std::array<std::uint32_t, 7> niNodeEdits;
+		std::array<std::array<std::uint32_t, 7>, 3> overrideEdits;
+		std::array<std::uint32_t, 7> switchEdits;
 
 		// Moves.
 		std::uint32_t animationGraphPlace;
@@ -45,6 +50,7 @@ namespace swf::inline SWF_NAMESPACE
 		// Calls: a function offset per SWF_HOOK_* (0 for the slot hooks below).
 		std::array<std::uint32_t, SWF_HOOK_COUNT> functions;
 		hooking::Vtable fadeNode;            // SWF_HOOK_FADE_ON_VISIBLE: slot 0x34's implementation
+		std::uint32_t fadeOnVisible;         // that implementation (0: read from the slot)
 		hooking::Vtable lightingProperty;    // slots 0x2A, 0x31
 		hooking::Vtable floatController;     // slot 0x27
 		hooking::Vtable colorController;     // slot 0x27
@@ -91,6 +97,9 @@ namespace swf::inline SWF_NAMESPACE
 		std::array<VtableId, 3> nodeOverrides;
 		std::uint64_t removeAllChildren;
 		VtableId niSwitchNode;
+		std::array<std::uint64_t, 7> niNodeEdits;
+		std::array<std::array<std::uint64_t, 7>, 3> overrideEdits;
+		std::array<std::uint64_t, 7> switchEdits;
 
 		std::uint64_t animationGraphPlace;
 		std::uint64_t reference3DPosition;
@@ -101,6 +110,7 @@ namespace swf::inline SWF_NAMESPACE
 
 		std::array<std::uint64_t, SWF_HOOK_COUNT> functions;
 		VtableId fadeNode;
+		std::uint64_t fadeOnVisible;
 		VtableId lightingProperty;
 		VtableId floatController;
 		VtableId colorController;
