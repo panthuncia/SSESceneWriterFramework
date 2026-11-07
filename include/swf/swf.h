@@ -112,6 +112,17 @@ typedef uint64_t SWF_Fields;
 #define SWF_FIELD_PROPERTIES (1ull << 5)
 #define SWF_FIELD_SHADER_FLAGS (1ull << 6)
 #define SWF_FIELD_MATERIAL (1ull << 7)
+#define SWF_FIELD_SKIN (1ull << 8)
+
+/* What NotifyWritten's object is for each field:
+ *   SWF_FIELD_MATERIAL      a BSShaderProperty* (its material's values, textures or per-object values such as its emissive
+ *                           colour, written in place), a BSGeometry* (its shader property's), or the BSShaderMaterial* itself
+ *   SWF_FIELD_SHADER_FLAGS  a BSShaderProperty*, or a BSGeometry* (its shader property's)
+ *   SWF_FIELD_PROPERTIES    a BSGeometry* whose shader or alpha property was replaced (prefer Write(SWF_WRITE_*_PROPERTY))
+ *   SWF_FIELD_SKIN          a BSGeometry* whose skin instance or skin partition was replaced, or whose partition's vertices
+ *                           were rewritten (body morphs); report every geometry sharing the skin
+ *   SWF_FIELD_TRANSFORM     an NiAVObject* moved outside the engine's update
+ * The hidden bit and property swaps should go through Write instead, which stores them for you. */
 
 typedef struct SWF_EventHeader
 {
