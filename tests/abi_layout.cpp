@@ -89,6 +89,7 @@ FROZEN(SWF_ProviderInfo, hostName, 40);
 FROZEN(SWF_ChildEvent, parent, 24);
 FROZEN(SWF_ChildEvent, child, 32);
 FROZEN(SWF_ChildEvent, unchanged, 40);
+FROZEN(SWF_ChildEvent, flags, 44);
 FROZEN(SWF_NodeEvent, node, 24);
 FROZEN(SWF_MovedEvent, key, 24);
 FROZEN(SWF_MovedEvent, writer, 32);

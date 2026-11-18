@@ -59,4 +59,6 @@ Within 0.x:
 - `SWF_ABI_MINOR` 1 added `CheckIntegrity`.
 - `SWF_ABI_MINOR` 2 added `Write` and `SWF_EVENT_SCENE_WRITE`.
 - `SWF_ABI_MINOR` 3 added `SWF_MovedEvent::keyKind` (`SWF_MOVED_KEY_*`: whether the key is a reference or a node).
+- `SWF_ABI_MINOR` 4 added `SWF_ChildEvent::flags`. `SWF_CHILD_REPARENT` marks the detach an attach or set makes of a child
+  that still has a parent, so a client can take the detach and the attach that follows as one move.
 - A client asks for the minor it was built with, so it connects only to a provider at least that new.

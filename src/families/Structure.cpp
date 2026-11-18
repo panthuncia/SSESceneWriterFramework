@@ -39,6 +39,26 @@ namespace swf::inline SWF_NAMESPACE::detours
 			return data && index < freeIdx ? data[index] : nullptr;
 		}
 
+		// NiAVObject::parent (+0x30).
+		constexpr std::size_t kParent = 0x30;
+
+		// The child an attach or set on this thread is moving from another parent. Its detach from that parent is the move's own.
+		thread_local void* t_reparenting = nullptr;
+
+		struct ReparentScope
+		{
+			void* previous;
+			explicit ReparentScope(void* child) :
+				previous(t_reparenting)
+			{
+				const bool parented = child && *reinterpret_cast<void* const*>(static_cast<std::byte*>(child) + kParent);
+				t_reparenting = parented ? child : nullptr;
+			}
+			~ReparentScope() { t_reparenting = previous; }
+			ReparentScope(const ReparentScope&) = delete;
+			ReparentScope& operator=(const ReparentScope&) = delete;
+		};
+
 		void FireChild(std::uint32_t id, void* parent, void* child, bool unchanged = false)
 		{
 			if (!*dispatch::Events().CountWord(id))
@@ -49,6 +69,7 @@ namespace swf::inline SWF_NAMESPACE::detours
 			event.parent = parent;
 			event.child = child;
 			event.unchanged = unchanged ? 1 : 0;
+			event.flags = id == SWF_EVENT_CHILD_DETACHING && child && child == t_reparenting ? SWF_CHILD_REPARENT : 0;
 			dispatch::Fire(event.header);
 		}
 
@@ -62,7 +83,10 @@ namespace swf::inline SWF_NAMESPACE::detours
 			static inline void (*attach)(void*, void*, bool) = nullptr;
 			static void Attach(void* node, void* child, bool firstAvail)
 			{
-				attach(node, child, firstAvail);
+				{
+					const ReparentScope scope(child);
+					attach(node, child, firstAvail);
+				}
 				Attached(node, child);
 			}
 
@@ -100,7 +124,10 @@ namespace swf::inline SWF_NAMESPACE::detours
 				void* previous = ChildAt(node, index);
 				if (previous != child)
 					Detaching(node, previous);
-				setAt1(node, index, child, out);
+				{
+					const ReparentScope scope(previous != child ? child : nullptr);
+					setAt1(node, index, child, out);
+				}
 				Attached(node, child, previous == child);
 			}
 
@@ -110,7 +137,10 @@ namespace swf::inline SWF_NAMESPACE::detours
 				void* previous = ChildAt(node, index);
 				if (previous != child)
 					Detaching(node, previous);
-				setAt2(node, index, child);
+				{
+					const ReparentScope scope(previous != child ? child : nullptr);
+					setAt2(node, index, child);
+				}
 				Attached(node, child, previous == child);
 			}
 

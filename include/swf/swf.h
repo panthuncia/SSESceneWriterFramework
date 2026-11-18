@@ -30,7 +30,7 @@ extern "C" {
 #endif
 
 #define SWF_ABI_MAJOR 1
-#define SWF_ABI_MINOR 3 /* 1: CheckIntegrity; 2: Write; 3: SWF_MovedEvent::keyKind */
+#define SWF_ABI_MINOR 4 /* 1: CheckIntegrity; 2: Write; 3: SWF_MovedEvent::keyKind; 4: SWF_ChildEvent::flags */
 
 /* Frozen: name of the export every candidate provides. */
 #define SWF_CANDIDATE_EXPORT "SWF_Candidate_v1"
@@ -208,8 +208,12 @@ typedef struct SWF_ChildEvent
 	void* parent; /* NiNode* */
 	void* child;  /* NiAVObject*; may be null (an empty slot set or detached) */
 	uint32_t unchanged; /* CHILD_ATTACHED from SetAt: the slot already held `child` */
-	uint32_t reserved;
+	uint32_t flags;     /* SWF_CHILD_* (abiMinor >= 4) */
 } SWF_ChildEvent;
+
+/* SWF_ChildEvent::flags. A CHILD_DETACHING that is the first half of a move: an attach or set is taking `child` from
+ * its parent, and CHILD_ATTACHED for `child` follows on the same thread before that attach returns. */
+#define SWF_CHILD_REPARENT 1u
 
 typedef struct SWF_NodeEvent
 {
