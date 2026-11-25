@@ -53,6 +53,7 @@ namespace swf::inline SWF_NAMESPACE::tables::se_1_5_97
 			f[SWF_HOOK_REFERENCE_DISABLE] = 56037;
 			f[SWF_HOOK_ENABLE_COMMAND] = 21613;
 			f[SWF_HOOK_FLORA_HARVEST_ALPHAS] = 14695;      // BSVisit::TraverseScenegraphGeometries<FloraAlphaTestSetter>
+			f[SWF_HOOK_WATER_NORMALS_UPDATE] = 31380;      // FUN_1404c4940
 			return f;
 		}
 

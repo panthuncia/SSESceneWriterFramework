@@ -46,7 +46,7 @@ it does.
 | structure | NiNode's 7 child-edit implementations, the classes overriding them, and the remove-all | `SWF_EVENT_CHILD_ATTACHED`, `SWF_EVENT_CHILD_DETACHING` |
 | switch-structural | NiSwitchNode's own 7 child edits | `SWF_EVENT_SWITCH_STRUCTURAL` |
 | moves | 4 reference movers (projectiles' world updates among them) and the cells' 2 update passes | `SWF_EVENT_MOVED` |
-| fade / node / property / geometry / material calls | 36 engine functions and vtable slots (see `SWF_HOOK_*` in `swf.h`) | `SWF_EVENT_CALL(hook)`, before and after, with the arguments |
+| fade / node / property / geometry / material calls | 41 engine functions and vtable slots (see `SWF_HOOK_*` in `swf.h`) | `SWF_EVENT_CALL(hook)`, before and after, with the arguments |
 | actor calls | `Actor::SetAlpha` on 3 vtables, and 3 actor move writers | `SWF_EVENT_CALL(hook)` |
 | decal calls | the 5 edits of a `BGSDecalNode`'s decal array | `SWF_EVENT_CALL(SWF_HOOK_DECAL_ARRAY_EDIT)` |
 | LOD segment calls | object LOD's segment show, hide and show-all, at all 9 of their call sites | `SWF_EVENT_CALL(hook)` |

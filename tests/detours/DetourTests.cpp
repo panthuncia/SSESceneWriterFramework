@@ -123,6 +123,7 @@ namespace
 	__declspec(noinline) void MaterialReceive(void*, bool, bool, bool, bool, bool e) { trace.push_back("receive " + std::to_string(V) + (e ? "e" : "")); }
 	__declspec(noinline) void FloatUpdate(void*, void*) { trace.push_back("float"); }
 	__declspec(noinline) void ColorUpdate(void*, void*) { trace.push_back("color"); }
+	__declspec(noinline) void WaterNormalsUpdateImpl(void*) { trace.push_back("water normals"); }
 
 	template <int... V>
 	void FillMaterials(HookTargets& targets, std::integer_sequence<int, V...>)
@@ -374,13 +375,18 @@ int main()
 	targets.floatController = Ref(floatController);
 	targets.colorController = Ref(colorController);
 	FillMaterials(targets, std::make_integer_sequence<int, 14>{});
+	targets.functions[SWF_HOOK_WATER_NORMALS_UPDATE] = Rva(reinterpret_cast<const void*>(&WaterNormalsUpdateImpl));
 	CHECK(detours::VerifyCalls(SWF_CAP_MATERIAL_CALLS, image, targets));
 	CHECK(detours::InstallCalls(SWF_CAP_MATERIAL_CALLS, image, targets));
 	for (std::uint32_t hook = SWF_HOOK_FLOAT_CONTROLLER_UPDATE; hook <= SWF_HOOK_MATERIAL_RECEIVE_VALUES; ++hook)
 		Subscribe(SWF_EVENT_CALL(hook), SWF_PHASE_POST, record);
+	Subscribe(SWF_EVENT_CALL(SWF_HOOK_WATER_NORMALS_UPDATE), SWF_PHASE_POST, record);
 	callEvents.clear();
 	Call(floatController, 0x27, static_cast<void*>(&a), static_cast<void*>(nullptr));
 	CHECK(trace.back() == "float" && callEvents.back().hook == SWF_HOOK_FLOAT_CONTROLLER_UPDATE);
+	reinterpret_cast<void (*)(void*)>(&WaterNormalsUpdateImpl)(&a);
+	CHECK(trace.back() == "water normals" && callEvents.back().hook == SWF_HOOK_WATER_NORMALS_UPDATE &&
+		  callEvents.back().args[0] == reinterpret_cast<std::uintptr_t>(&a));
 	for (int v = 0; v < 14; ++v) {
 		auto& vtable = vtables[nextVtable - 14 + v];
 		Call(vtable, 0x09, static_cast<void*>(&a));

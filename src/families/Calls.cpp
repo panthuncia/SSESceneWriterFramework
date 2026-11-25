@@ -67,6 +67,7 @@ namespace swf::inline SWF_NAMESPACE::detours
 		using MaterialClearTextures = Hook<SWF_HOOK_MATERIAL_CLEAR_TEXTURES, void(void*), V>;
 		template <std::uint32_t V>
 		using MaterialReceiveValues = Hook<SWF_HOOK_MATERIAL_RECEIVE_VALUES, void(void*, bool, bool, bool, bool, bool), V>;
+		using WaterNormalsUpdate = Hook<SWF_HOOK_WATER_NORMALS_UPDATE, void(void*)>;
 
 		template <std::uint32_t V>
 		using ActorSetAlpha = Hook<SWF_HOOK_ACTOR_SET_ALPHA, void(void*, float), V>;
@@ -222,6 +223,7 @@ namespace swf::inline SWF_NAMESPACE::detours
 				SwapSlot<FloatControllerUpdate>(plan, image, targets.floatController, 0x27);
 				SwapSlot<ColorControllerUpdate>(plan, image, targets.colorController, 0x27);
 				SwapMaterials(plan, image, targets, std::make_integer_sequence<std::uint32_t, 14>{});
+				DetourAt<WaterNormalsUpdate>(plan, hooking::At(image, targets.functions[SWF_HOOK_WATER_NORMALS_UPDATE]));
 				return true;
 			case SWF_CAP_ACTOR_CALLS:
 				SwapSlot<ActorSetAlpha<0>>(plan, image, targets.actors[0], 0xE1);
@@ -353,7 +355,7 @@ namespace swf::inline SWF_NAMESPACE::detours
 			return SWF_CAP_PROPERTY_CALLS;
 		if ((hook >= SWF_HOOK_GEOMETRY_ATTACH_ALPHA && hook <= SWF_HOOK_LAND_BLEND_PARAMS) || hook == SWF_HOOK_FLORA_HARVEST_ALPHAS)
 			return SWF_CAP_GEOMETRY_CALLS;
-		if (hook >= SWF_HOOK_FLOAT_CONTROLLER_UPDATE && hook <= SWF_HOOK_MATERIAL_RECEIVE_VALUES)
+		if ((hook >= SWF_HOOK_FLOAT_CONTROLLER_UPDATE && hook <= SWF_HOOK_MATERIAL_RECEIVE_VALUES) || hook == SWF_HOOK_WATER_NORMALS_UPDATE)
 			return SWF_CAP_MATERIAL_CALLS;
 		if (hook == SWF_HOOK_FADE_SNAP)
 			return SWF_CAP_FADE_CALLS;

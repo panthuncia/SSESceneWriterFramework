@@ -30,7 +30,7 @@ extern "C" {
 #endif
 
 #define SWF_ABI_MAJOR 1
-#define SWF_ABI_MINOR 4 /* 1: CheckIntegrity; 2: Write; 3: SWF_MovedEvent::keyKind; 4: SWF_ChildEvent::flags */
+#define SWF_ABI_MINOR 5 /* 1: CheckIntegrity; 2: Write; 3: SWF_MovedEvent::keyKind; 4: SWF_ChildEvent::flags; 5: SWF_HOOK_WATER_NORMALS_UPDATE */
 
 /* Frozen: name of the export every candidate provides. */
 #define SWF_CANDIDATE_EXPORT "SWF_Candidate_v1"
@@ -340,7 +340,13 @@ typedef struct SWF_CallEvent
                                                * recursive over the object's geometries: each alpha's threshold (+0x32) swapped
                                                * inline between the unharvested and harvested values. From the harvest and the
                                                * harvestable 3D's setup */
-#define SWF_HOOK_COUNT 58
+/* SWF_CAP_MATERIAL_CALLS */
+#define SWF_HOOK_WATER_NORMALS_UPDATE 58      /* 0x520fa0 (TESWaterNormals*): the water object's per-frame material update, from
+                                               * TESWaterSystem::Update and AddWater. While the form's +0x23C flag is set it
+                                               * stores the queued normal textures into its BSWaterShaderMaterial (object +0x28)
+                                               * at +0x40-+0x58 as they finish loading, the default normal map until then; every
+                                               * call writes the normal scroll at +0x100-+0x11C */
+#define SWF_HOOK_COUNT 59
 
 /* Event callback. `scratch` points to SWF_SCRATCH_WORDS words private to this subscription
  * and this engine call, zeroed before the first dispatch. For a PRE|POST subscription they

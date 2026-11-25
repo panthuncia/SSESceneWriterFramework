@@ -43,6 +43,7 @@ First release. Supports SE 1.5.97, AE 1.6.1170 and AE 1.7.104.
 - Filters: `SWF_FILTER_SHOW`, and `SWF_FILTER_CALL` for vetoable calls.
 - `NotifyWritten` for a plugin's own writes.
 - `SWF_HOOK_FLORA_HARVEST_ALPHAS`: a flora's harvested look, where the engine changes alpha thresholds inline.
+- `SWF_HOOK_WATER_NORMALS_UPDATE`: a water material's normal textures, which the engine stores in place as they load.
 - `Write` for a plugin's scene writes: SWF makes the store between `SWF_EVENT_SCENE_WRITE`'s PRE and POST (the hidden bit, a geometry's shader and alpha properties, an alpha property's flags), so subscribers see them as they see the engine's writers.
 - `SiteCount`, `ResolveSite` and `CheckIntegrity`.
 
@@ -61,4 +62,6 @@ Within 0.x:
 - `SWF_ABI_MINOR` 3 added `SWF_MovedEvent::keyKind` (`SWF_MOVED_KEY_*`: whether the key is a reference or a node).
 - `SWF_ABI_MINOR` 4 added `SWF_ChildEvent::flags`. `SWF_CHILD_REPARENT` marks the detach an attach or set makes of a child
   that still has a parent, so a client can take the detach and the attach that follows as one move.
+- `SWF_ABI_MINOR` 5 added `SWF_HOOK_WATER_NORMALS_UPDATE` to the material calls: the water object's per-frame material
+  update, which stores its normal textures into the water material in place once they load.
 - A client asks for the minor it was built with, so it connects only to a provider at least that new.
